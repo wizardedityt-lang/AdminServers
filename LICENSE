@@ -1,201 +1,857 @@
-                                 Apache License
-                           Version 2.0, January 2004
-                        http://www.apache.org/licenses/
+-- // Servisler //
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
 
-   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+local LocalPlayer = Players.LocalPlayer
 
-   1. Definitions.
+-- // Ayar Kaydetme Sistemi (Config System) //
+local configName = "NebulaHub_Config.json"
+local NebulaConfig = {
+    Sliders = {
+        FlySpeed = 50,
+        WalkSpeed = 50,
+        SpinSpeed = 100
+    },
+    Keybinds = {
+        Fly = "F", WalkSpeed = "Z", Spin = "C",
+        Jump = nil, Noclip = nil, GlobalESP = "E",
+        AutoTP = nil, MM2ESP = nil, AutoGrab = nil
+    }
+}
 
-      "License" shall mean the terms and conditions for use, reproduction,
-      and distribution as defined by Sections 1 through 9 of this document.
+-- Dosyadan Ayarları Yükle
+local function LoadConfig()
+    pcall(function()
+        if isfile and isfile(configName) and readfile then
+            local data = HttpService:JSONDecode(readfile(configName))
+            if data then
+                if data.Sliders then for k, v in pairs(data.Sliders) do NebulaConfig.Sliders[k] = v end end
+                if data.Keybinds then for k, v in pairs(data.Keybinds) do NebulaConfig.Keybinds[k] = v end end
+            end
+        end
+    end)
+end
 
-      "Licensor" shall mean the copyright owner or entity authorized by
-      the copyright owner that is granting the License.
+-- Dosyaya Ayarları Kaydet
+local function SaveConfig()
+    pcall(function()
+        if writefile then writefile(configName, HttpService:JSONEncode(NebulaConfig)) end
+    end)
+end
 
-      "Legal Entity" shall mean the union of the acting entity and all
-      other entities that control, are controlled by, or are under common
-      control with that entity. For the purposes of this definition,
-      "control" means (i) the power, direct or indirect, to cause the
-      direction or management of such entity, whether by contract or
-      otherwise, or (ii) ownership of fifty percent (50%) or more of the
-      outstanding shares, or (iii) beneficial ownership of such entity.
+LoadConfig()
 
-      "You" (or "Your") shall mean an individual or Legal Entity
-      exercising permissions granted by this License.
+-- // Değişkenler //
+local maxFlySpeed, maxWalkSpeed, maxSpinSpeed = 700, 700, 3000
+local isFlying = false
+local isSpeedEnabled = false
+local isSpinning = false
+local isInfJumpEnabled, isNoclipEnabled, isGlobalESPEnabled = false, false, false
 
-      "Source" form shall mean the preferred form for making modifications,
-      including but not limited to software source code, documentation
-      source, and configuration files.
+-- İzleme (Spectate) & Ard Arda TP (Loop TP) Değişkenleri
+local spectatedPlayer = nil
+local spectateConn = nil
+local attachedPlayer = nil
+local attachLoop = nil
 
-      "Object" form shall mean any form resulting from mechanical
-      transformation or translation of a Source form, including but
-      not limited to compiled object code, generated documentation,
-      and conversions to other media types.
+-- Lokasyon / Otomatik TP Değişkenleri
+local savedCFrame = nil
+local isAutoTPEnabled = false
+local autoTPLoopConn = nil
+local lastTPTime = 0
 
-      "Work" shall mean the work of authorship, whether in Source or
-      Object form, made available under the License, as indicated by a
-      copyright notice that is included in or attached to the work
-      (an example is provided in the Appendix below).
+-- MM2 Değişkenleri
+local isMM2ESPEnabled = false
+local isAutoGrabEnabled = false
+local grabbingGun = false
 
-      "Derivative Works" shall mean any work, whether in Source or Object
-      form, that is based on (or derived from) the Work and for which the
-      editorial revisions, annotations, elaborations, or other modifications
-      represent, as a whole, an original work of authorship. For the purposes
-      of this License, Derivative Works shall not include works that remain
-      separable from, or merely link (or bind by name) to the interfaces of,
-      the Work and Derivative Works thereof.
+local flyLoop, speedLoop, infJumpConnection, spinLoop, noclipLoop, mm2ESPLoop, autoGrabLoop
+local eventConnections = {} 
+local activeESPs = {} 
 
-      "Contribution" shall mean any work of authorship, including
-      the original version of the Work and any modifications or additions
-      to that Work or Derivative Works thereof, that is intentionally
-      submitted to Licensor for inclusion in the Work by the copyright owner
-      or by an individual or Legal Entity authorized to submit on behalf of
-      the copyright owner. For the purposes of this definition, "submitted"
-      means any form of electronic, verbal, or written communication sent
-      to the Licensor or its representatives, including but not limited to
-      communication on electronic mailing lists, source code control systems,
-      and issue tracking systems that are managed by, or on behalf of, the
-      Licensor for the purpose of discussing and improving the Work, but
-      excluding communication that is conspicuously marked or otherwise
-      designated in writing by the copyright owner as "Not a Contribution."
+-- // Kick Koruması //
+pcall(function()
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+    setreadonly(mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if self == LocalPlayer and (method == "Kick" or method == "kick") then return nil end
+        return oldNamecall(self, ...)
+    end)
+    setreadonly(mt, true)
+end)
 
-      "Contributor" shall mean Licensor and any individual or Legal Entity
-      on behalf of whom a Contribution has been received by Licensor and
-      subsequently incorporated within the Work.
+-- // ANA ARAYÜZ (GUI) //
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "NebulaHubPremium"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 
-   2. Grant of Copyright License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      copyright license to reproduce, prepare Derivative Works of,
-      publicly display, publicly perform, sublicense, and distribute the
-      Work and such Derivative Works in Source or Object form.
+local success = pcall(function() ScreenGui.Parent = CoreGui end)
+if not success then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
-   3. Grant of Patent License. Subject to the terms and conditions of
-      this License, each Contributor hereby grants to You a perpetual,
-      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
-      (except as stated in this section) patent license to make, have made,
-      use, offer to sell, sell, import, and otherwise transfer the Work,
-      where such license applies only to those patent claims licensable
-      by such Contributor that are necessarily infringed by their
-      Contribution(s) alone or by combination of their Contribution(s)
-      with the Work to which such Contribution(s) was submitted. If You
-      institute patent litigation against any entity (including a
-      cross-claim or counterclaim in a lawsuit) alleging that the Work
-      or a Contribution incorporated within the Work constitutes direct
-      or contributory patent infringement, then any patent licenses
-      granted to You under this License for that Work shall terminate
-      as of the date such litigation is filed.
+-- ANA MENÜ ÇERÇEVESİ
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 420, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -440, 0.5, -210)
+MainFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.ZIndex = 10
+MainFrame.Parent = ScreenGui
 
-   4. Redistribution. You may reproduce and distribute copies of the
-      Work or Derivative Works thereof in any medium, with or without
-      modifications, and in Source or Object form, provided that You
-      meet the following conditions:
+local MainUICorner = Instance.new("UICorner", MainFrame)
+MainUICorner.CornerRadius = UDim.new(0, 10)
 
-      (a) You must give any other recipients of the Work or
-          Derivative Works a copy of this License; and
+local MainUIStroke = Instance.new("UIStroke", MainFrame)
+MainUIStroke.Color = Color3.fromRGB(165, 94, 234)
+MainUIStroke.Thickness = 2.5
 
-      (b) You must cause any modified files to carry prominent notices
-          stating that You changed the files; and
+local MainGradient = Instance.new("UIGradient", MainFrame)
+MainGradient.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(15, 10, 30)),
+    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(30, 20, 60)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(10, 5, 20))
+}
+MainGradient.Rotation = 45
 
-      (c) You must retain, in the Source form of any Derivative Works
-          that You distribute, all copyright, patent, trademark, and
-          attribution notices from the Source form of the Work,
-          excluding those notices that do not pertain to any part of
-          the Derivative Works; and
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, -50, 0, 40)
+Title.Position = UDim2.new(0, 15, 0, 0)
+Title.BackgroundTransparency = 1
+Title.RichText = true
+Title.Text = "<b><font color='#a55eea'>🌌 NEBULA HUB</font></b> <font color='#fed330'>✦ PREMIUM ✦</font>"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 22
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.ZIndex = 11
 
-      (d) If the Work includes a "NOTICE" text file as part of its
-          distribution, then any Derivative Works that You distribute must
-          include a readable copy of the attribution notices contained
-          within such NOTICE file, excluding those notices that do not
-          pertain to any part of the Derivative Works, in at least one
-          of the following places: within a NOTICE text file distributed
-          as part of the Derivative Works; within the Source form or
-          documentation, if provided along with the Derivative Works; or,
-          within a display generated by the Derivative Works, if and
-          wherever such third-party notices normally appear. The contents
-          of the NOTICE file are for informational purposes only and
-          do not modify the License. You may add Your own attribution
-          notices within Derivative Works that You distribute, alongside
-          or as an addendum to the NOTICE text from the Work, provided
-          that such additional attribution notices cannot be construed
-          as modifying the License.
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -40, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 18
+CloseBtn.ZIndex = 12
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
 
-      You may add Your own copyright statement to Your modifications and
-      may provide additional or different license terms and conditions
-      for use, reproduction, or distribution of Your modifications, or
-      for any such Derivative Works as a whole, provided Your use,
-      reproduction, and distribution of the Work otherwise complies with
-      the conditions stated in this License.
+-- // SEKME (TAB) SİSTEMİ //
+local TabBar = Instance.new("Frame", MainFrame)
+TabBar.Size = UDim2.new(1, -20, 0, 35)
+TabBar.Position = UDim2.new(0, 10, 0, 45)
+TabBar.BackgroundTransparency = 1
+TabBar.ZIndex = 11
 
-   5. Submission of Contributions. Unless You explicitly state otherwise,
-      any Contribution intentionally submitted for inclusion in the Work
-      by You to the Licensor shall be under the terms and conditions of
-      this License, without any additional terms or conditions.
-      Notwithstanding the above, nothing herein shall supersede or modify
-      the terms of any separate license agreement you may have executed
-      with Licensor regarding such Contributions.
+local TabListLayout = Instance.new("UIListLayout", TabBar)
+TabListLayout.FillDirection = Enum.FillDirection.Horizontal
+TabListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+TabListLayout.Padding = UDim.new(0, 8)
 
-   6. Trademarks. This License does not grant permission to use the trade
-      names, trademarks, service marks, or product names of the Licensor,
-      except as required for reasonable and customary use in describing the
-      origin of the Work and reproducing the content of the NOTICE file.
+local function SetTabBtn(btn, text)
+    btn.Size = UDim2.new(0.31, 0, 1, 0)
+    btn.Text = text
+    btn.Font = Enum.Font.GothamBold
+    btn.ZIndex = 12
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+end
 
-   7. Disclaimer of Warranty. Unless required by applicable law or
-      agreed to in writing, Licensor provides the Work (and each
-      Contributor provides its Contributions) on an "AS IS" BASIS,
-      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-      implied, including, without limitation, any warranties or conditions
-      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
-      PARTICULAR PURPOSE. You are solely responsible for determining the
-      appropriateness of using or redistributing the Work and assume any
-      risks associated with Your exercise of permissions under this License.
+local MainTabBtn = Instance.new("TextButton", TabBar)
+SetTabBtn(MainTabBtn, "GENEL")
+MainTabBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234)
+MainTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 
-   8. Limitation of Liability. In no event and under no legal theory,
-      whether in tort (including negligence), contract, or otherwise,
-      unless required by applicable law (such as deliberate and grossly
-      negligent acts) or agreed to in writing, shall any Contributor be
-      liable to You for damages, including any direct, indirect, special,
-      incidental, or consequential damages of any character arising as a
-      result of this License or out of the use or inability to use the
-      Work (including but not limited to damages for loss of goodwill,
-      work stoppage, computer failure or malfunction, or any and all
-      other commercial damages or losses), even if such Contributor
-      has been advised of the possibility of such damages.
+local LocTabBtn = Instance.new("TextButton", TabBar)
+SetTabBtn(LocTabBtn, "LOKASYON")
+LocTabBtn.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+LocTabBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 
-   9. Accepting Warranty or Additional Liability. While redistributing
-      the Work or Derivative Works thereof, You may choose to offer,
-      and charge a fee for, acceptance of support, warranty, indemnity,
-      or other liability obligations and/or rights consistent with this
-      License. However, in accepting such obligations, You may act only
-      on Your own behalf and on Your sole responsibility, not on behalf
-      of any other Contributor, and only if You agree to indemnify,
-      defend, and hold each Contributor harmless for any liability
-      incurred by, or claims asserted against, such Contributor by reason
-      of your accepting any such warranty or additional liability.
+local MM2TabBtn = Instance.new("TextButton", TabBar)
+SetTabBtn(MM2TabBtn, "MM2")
+MM2TabBtn.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+MM2TabBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 
-   END OF TERMS AND CONDITIONS
+-- KAYDIRMA ALANLARI
+local function CreateScrollFrame()
+    local sf = Instance.new("ScrollingFrame", MainFrame)
+    sf.Size = UDim2.new(1, -10, 1, -95)
+    sf.Position = UDim2.new(0, 5, 0, 85)
+    sf.BackgroundTransparency = 1
+    sf.ScrollBarThickness = 6
+    sf.ScrollBarImageColor3 = Color3.fromRGB(165, 94, 234)
+    sf.CanvasSize = UDim2.new(0, 0, 0, 1000)
+    sf.ZIndex = 11
+    local layout = Instance.new("UIListLayout", sf)
+    layout.Padding = UDim.new(0, 10)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        sf.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+    end)
+    return sf
+end
 
-   APPENDIX: How to apply the Apache License to your work.
+local MainScrollFrame = CreateScrollFrame()
+local LocScrollFrame = CreateScrollFrame()
+local MM2ScrollFrame = CreateScrollFrame()
+LocScrollFrame.Visible = false
+MM2ScrollFrame.Visible = false
 
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
+local function SwitchTab(activeBtn, activeFrame)
+    local frames = {MainScrollFrame, LocScrollFrame, MM2ScrollFrame}
+    local btns = {MainTabBtn, LocTabBtn, MM2TabBtn}
+    
+    for _, f in ipairs(frames) do f.Visible = (f == activeFrame) end
+    for _, b in ipairs(btns) do
+        if b == activeBtn then
+            b.BackgroundColor3 = Color3.fromRGB(165, 94, 234); b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            b.BackgroundColor3 = Color3.fromRGB(40, 30, 60); b.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    end
+end
 
-   Copyright [yyyy] [name of copyright owner]
+MainTabBtn.MouseButton1Click:Connect(function() SwitchTab(MainTabBtn, MainScrollFrame) end)
+LocTabBtn.MouseButton1Click:Connect(function() SwitchTab(LocTabBtn, LocScrollFrame) end)
+MM2TabBtn.MouseButton1Click:Connect(function() SwitchTab(MM2TabBtn, MM2ScrollFrame) end)
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+-- // AKTİF OYUNCULAR (PANEL GUI) //
+local PlayerPanelFrame = Instance.new("Frame")
+PlayerPanelFrame.Size = UDim2.new(0, 420, 0, 420)
+PlayerPanelFrame.Position = UDim2.new(0.5, 20, 0.5, -210)
+PlayerPanelFrame.BackgroundColor3 = Color3.fromRGB(15, 10, 30)
+PlayerPanelFrame.BorderSizePixel = 0
+PlayerPanelFrame.Visible = false
+PlayerPanelFrame.Active = true
+PlayerPanelFrame.ZIndex = 10
+PlayerPanelFrame.Parent = ScreenGui
 
-       http://www.apache.org/licenses/LICENSE-2.0
+Instance.new("UICorner", PlayerPanelFrame).CornerRadius = UDim.new(0, 10)
+local PanelStroke = Instance.new("UIStroke", PlayerPanelFrame)
+PanelStroke.Color = Color3.fromRGB(165, 94, 234)
+PanelStroke.Thickness = 2.5
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+local PanelTitle = Instance.new("TextLabel")
+PanelTitle.Size = UDim2.new(1, -10, 0, 40); PanelTitle.Position = UDim2.new(0, 15, 0, 0)
+PanelTitle.BackgroundTransparency = 1; PanelTitle.Text = "👥 OYUNCU LİSTESİ"
+PanelTitle.TextColor3 = Color3.fromRGB(165, 94, 234); PanelTitle.Font = Enum.Font.GothamBlack
+PanelTitle.TextSize = 18; PanelTitle.TextXAlignment = Enum.TextXAlignment.Left; PanelTitle.ZIndex = 11
+PanelTitle.Parent = PlayerPanelFrame
+
+local PlayerScrollFrame = Instance.new("ScrollingFrame")
+PlayerScrollFrame.Size = UDim2.new(1, -10, 1, -50); PlayerScrollFrame.Position = UDim2.new(0, 5, 0, 40)
+PlayerScrollFrame.BackgroundTransparency = 1; PlayerScrollFrame.ScrollBarThickness = 6
+PlayerScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(165, 94, 234); PlayerScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 500)
+PlayerScrollFrame.ZIndex = 11; PlayerScrollFrame.Parent = PlayerPanelFrame
+
+local PlayerListLayout = Instance.new("UIListLayout")
+PlayerListLayout.Padding = UDim.new(0, 8); PlayerListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; PlayerListLayout.Parent = PlayerScrollFrame
+PlayerListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    PlayerScrollFrame.CanvasSize = UDim2.new(0, 0, 0, PlayerListLayout.AbsoluteContentSize.Y + 20)
+end)
+
+-- // MODÜL OLUŞTURUCU YARDIMCILARI //
+local function CreateModule(name, hasSlider, parentFrame)
+    local Frame = Instance.new("Frame", parentFrame)
+    Frame.Size = UDim2.new(1, -20, 0, hasSlider and 85 or 50)
+    Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    Frame.BackgroundTransparency = 0.5
+    Frame.ZIndex = 15
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(0, 180, 0, 30); Label.Position = UDim2.new(0, 15, 0, 10); Label.BackgroundTransparency = 1
+    Label.Text = name; Label.TextColor3 = Color3.fromRGB(230, 230, 230); Label.Font = Enum.Font.GothamSemibold
+    Label.TextSize = 14; Label.TextXAlignment = Enum.TextXAlignment.Left; Label.ZIndex = 16
+
+    local KeybindBtn = Instance.new("TextButton", Frame)
+    KeybindBtn.Size = UDim2.new(0, 60, 0, 30); KeybindBtn.Position = UDim2.new(1, -135, 0, 10)
+    KeybindBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40); KeybindBtn.Text = "[ + ]"
+    KeybindBtn.TextColor3 = Color3.fromRGB(165, 94, 234); KeybindBtn.Font = Enum.Font.GothamBold; KeybindBtn.TextSize = 13; KeybindBtn.ZIndex = 17
+    Instance.new("UICorner", KeybindBtn).CornerRadius = UDim.new(0, 6)
+
+    local ToggleBtn = Instance.new("TextButton", Frame)
+    ToggleBtn.Size = UDim2.new(0, 50, 0, 30); ToggleBtn.Position = UDim2.new(1, -65, 0, 10)
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); ToggleBtn.Text = "OFF"
+    ToggleBtn.TextColor3 = Color3.fromRGB(255, 80, 80); ToggleBtn.Font = Enum.Font.GothamBold; ToggleBtn.TextSize = 14; ToggleBtn.ZIndex = 17
+    Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(0, 6)
+
+    local SliderParts = {}
+    if hasSlider then
+        local SBar = Instance.new("Frame", Frame)
+        SBar.Size = UDim2.new(1, -85, 0, 10); SBar.Position = UDim2.new(0, 15, 0, 55); SBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); SBar.Active = true; SBar.ZIndex = 16
+        Instance.new("UICorner", SBar).CornerRadius = UDim.new(1, 0)
+
+        local SFill = Instance.new("Frame", SBar)
+        SFill.Size = UDim2.new(0, 0, 1, 0); SFill.BackgroundColor3 = Color3.fromRGB(165, 94, 234); SFill.ZIndex = 17
+        Instance.new("UICorner", SFill).CornerRadius = UDim.new(1, 0)
+
+        local SKnob = Instance.new("Frame", SFill)
+        SKnob.Size = UDim2.new(0, 20, 0, 20); SKnob.Position = UDim2.new(1, -10, 0.5, -10); SKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255); SKnob.Active = true; SKnob.ZIndex = 18
+        Instance.new("UICorner", SKnob).CornerRadius = UDim.new(1, 0)
+
+        local SInput = Instance.new("TextBox", Frame)
+        SInput.Size = UDim2.new(0, 50, 0, 25); SInput.Position = UDim2.new(1, -65, 0, 48); SInput.BackgroundColor3 = Color3.fromRGB(30, 30, 40); SInput.ZIndex = 17
+        SInput.Text = "50"; SInput.TextColor3 = Color3.fromRGB(165, 94, 234); SInput.Font = Enum.Font.GothamBold; SInput.TextSize = 13
+        Instance.new("UICorner", SInput).CornerRadius = UDim.new(0, 6)
+
+        SliderParts = {Bar = SBar, Fill = SFill, Knob = SKnob, Input = SInput}
+    end
+    return Frame, ToggleBtn, SliderParts, KeybindBtn
+end
+
+-- SADE BUTON MODÜLÜ (LOKASYON GİBİ SADECE TIKLANABİLİR ŞEYLER İÇİN)
+local function CreateActionModule(name, btnText, parentFrame)
+    local Frame = Instance.new("Frame", parentFrame)
+    Frame.Size = UDim2.new(1, -20, 0, 50)
+    Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+    Frame.BackgroundTransparency = 0.5
+    Frame.ZIndex = 15
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(0, 180, 0, 30); Label.Position = UDim2.new(0, 15, 0, 10); Label.BackgroundTransparency = 1
+    Label.Text = name; Label.TextColor3 = Color3.fromRGB(230, 230, 230); Label.Font = Enum.Font.GothamSemibold
+    Label.TextSize = 14; Label.TextXAlignment = Enum.TextXAlignment.Left; Label.ZIndex = 16
+
+    local ActionBtn = Instance.new("TextButton", Frame)
+    ActionBtn.Size = UDim2.new(0, 100, 0, 30); ActionBtn.Position = UDim2.new(1, -115, 0, 10)
+    ActionBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234); ActionBtn.Text = btnText
+    ActionBtn.TextColor3 = Color3.fromRGB(255, 255, 255); ActionBtn.Font = Enum.Font.GothamBold; ActionBtn.TextSize = 12; ActionBtn.ZIndex = 17
+    Instance.new("UICorner", ActionBtn).CornerRadius = UDim.new(0, 6)
+
+    return ActionBtn, Label
+end
+
+local function UpdateUI(toggleBtn, state)
+    if state then toggleBtn.Text = "ON"; toggleBtn.TextColor3 = Color3.fromRGB(80, 255, 80)
+    else toggleBtn.Text = "OFF"; toggleBtn.TextColor3 = Color3.fromRGB(255, 80, 80) end
+end
+
+-- SÜRÜKLEME VE ARAYÜZ YARDIMCILARI
+local function MakeDraggable(TopBar, FrameToMove)
+    local dragging, dragInput, mousePos, framePos
+    TopBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; mousePos = input.Position; framePos = FrameToMove.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    TopBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - mousePos
+            FrameToMove.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+        end
+    end)
+end
+MakeDraggable(Title, MainFrame)
+MakeDraggable(PanelTitle, PlayerPanelFrame)
+
+-- KAYITLI SLIDER SİSTEMİ
+local function SetupSlider(SliderObj, configKey, maxValue, callback)
+    local sliding = false
+    local startVal = NebulaConfig.Sliders[configKey] or 50
+    SliderObj.Input.Text = tostring(startVal)
+    SliderObj.Fill.Size = UDim2.new(startVal / maxValue, 0, 1, 0)
+    callback(startVal)
+
+    local function updateValue(val)
+        val = math.clamp(math.floor(val), 1, maxValue)
+        SliderObj.Fill.Size = UDim2.new(val / maxValue, 0, 1, 0)
+        SliderObj.Input.Text = tostring(val)
+        
+        NebulaConfig.Sliders[configKey] = val
+        SaveConfig()
+        callback(val)
+    end
+
+    local function startSliding(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then sliding = true end end
+    SliderObj.Knob.InputBegan:Connect(startSliding); SliderObj.Bar.InputBegan:Connect(startSliding)
+    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then sliding = false end end)
+    
+    RunService.RenderStepped:Connect(function()
+        if sliding then
+            local mouseX = UserInputService:GetMouseLocation().X
+            local barX = SliderObj.Bar.AbsolutePosition.X
+            local percentage = math.clamp((mouseX - barX) / SliderObj.Bar.AbsoluteSize.X, 0, 1)
+            updateValue(percentage * maxValue)
+        end
+    end)
+    
+    SliderObj.Input.FocusLost:Connect(function()
+        local num = tonumber(SliderObj.Input.Text)
+        if num then updateValue(num) else updateValue(NebulaConfig.Sliders[configKey]) end
+    end)
+end
+
+-- // KAYITLI KEYBIND SİSTEMİ //
+local function SetupKeybind(KeyBtn, configKey, actionFunc)
+    local currentKeyName = NebulaConfig.Keybinds[configKey]
+    local currentKey = nil
+    
+    if currentKeyName then pcall(function() currentKey = Enum.KeyCode[currentKeyName] end) end
+    
+    local isBinding = false
+    if currentKey then KeyBtn.Text = "[ "..currentKey.Name.." ]" end
+
+    KeyBtn.MouseButton1Click:Connect(function()
+        if isBinding then
+            isBinding = false; currentKey = nil; NebulaConfig.Keybinds[configKey] = nil
+            SaveConfig(); KeyBtn.Text = "[ + ]"; KeyBtn.TextColor3 = Color3.fromRGB(165, 94, 234)
+        else
+            isBinding = true; KeyBtn.Text = "..."; KeyBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
+        end
+    end)
+
+    local conn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if isBinding then
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                if input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Escape then
+                    currentKey = nil; NebulaConfig.Keybinds[configKey] = nil; KeyBtn.Text = "[ + ]"
+                else
+                    currentKey = input.KeyCode; NebulaConfig.Keybinds[configKey] = currentKey.Name; KeyBtn.Text = "[ "..currentKey.Name.." ]"
+                end
+                KeyBtn.TextColor3 = Color3.fromRGB(165, 94, 234)
+                SaveConfig(); isBinding = false
+            end
+        elseif currentKey and input.KeyCode == currentKey and not gameProcessed then
+            actionFunc() 
+        end
+    end)
+    table.insert(eventConnections, conn)
+end
+
+
+-- ==========================================
+-- // GENEL SEKME MODÜLLERİ VE FONKSİYONLARI //
+-- ==========================================
+local FlyMod, FlyToggle, FlySlider, FlyKey = CreateModule("🚀 Uçma (Fly)", true, MainScrollFrame)
+local SpeedMod, SpeedToggle, SpeedSlider, SpeedKey = CreateModule("⚡ Hız (WalkSpeed)", true, MainScrollFrame)
+local SpinMod, SpinToggle, SpinSlider, SpinKey = CreateModule("🌪️ Spinbot", true, MainScrollFrame)
+local JumpMod, JumpToggle, _, JumpKey = CreateModule("🦘 Sınırsız Zıplama", false, MainScrollFrame)
+local NoclipMod, NoclipToggle, _, NoclipKey = CreateModule("👻 Noclip (Duvarlardan Geç)", false, MainScrollFrame)
+local GlobalESPMod, GlobalESPToggle, _, GlobalESPKey = CreateModule("👁️ Global ESP", false, MainScrollFrame)
+local PlayerPanelMod, PlayerPanelToggle, _, _ = CreateModule("👥 Aktif Oyuncular (Panel)", false, MainScrollFrame)
+
+SetupSlider(FlySlider, "FlySpeed", maxFlySpeed, function(val) NebulaConfig.Sliders.FlySpeed = val end)
+SetupSlider(SpeedSlider, "WalkSpeed", maxWalkSpeed, function(val) NebulaConfig.Sliders.WalkSpeed = val end)
+SetupSlider(SpinSlider, "SpinSpeed", maxSpinSpeed, function(val) NebulaConfig.Sliders.SpinSpeed = val end)
+
+-- STANDART ESP FONKSİYONLARI
+local function ApplyESP(player)
+    if player.Character and not player.Character:FindFirstChild("PremiumESP") then
+        local hl = Instance.new("Highlight")
+        hl.Name = "PremiumESP"; hl.FillColor = Color3.fromRGB(165, 94, 234); hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.FillTransparency = 0.6; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = player.Character
+    end
+end
+
+local function RemoveESP(player)
+    if player.Character and player.Character:FindFirstChild("PremiumESP") then player.Character.PremiumESP:Destroy() end
+end
+
+local function UpdateGlobalESP()
+    if isGlobalESPEnabled then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then ApplyESP(player) end
+        end
+    else
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and not activeESPs[player] then RemoveESP(player) end
+        end
+    end
+end
+local function ToggleGlobalESP() isGlobalESPEnabled = not isGlobalESPEnabled; UpdateUI(GlobalESPToggle, isGlobalESPEnabled); UpdateGlobalESP() end
+GlobalESPToggle.MouseButton1Click:Connect(ToggleGlobalESP); SetupKeybind(GlobalESPKey, "GlobalESP", ToggleGlobalESP)
+
+local function UpdateFly()
+    local char = LocalPlayer.Character; if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local HRP = char.HumanoidRootPart; local Humanoid = char:FindFirstChildOfClass("Humanoid")
+    if isFlying then
+        Humanoid.PlatformStand = true
+        if HRP:FindFirstChild("FlyAttachment") then HRP.FlyAttachment:Destroy() end
+        if HRP:FindFirstChild("FlyLinear") then HRP.FlyLinear:Destroy() end
+        if HRP:FindFirstChild("FlyAlign") then HRP.FlyAlign:Destroy() end
+        local attachment = Instance.new("Attachment", HRP); attachment.Name = "FlyAttachment"
+        local lv = Instance.new("LinearVelocity", HRP); lv.Name = "FlyLinear"; lv.Attachment0 = attachment; lv.MaxForce = math.huge; lv.VectorVelocity = Vector3.new(0, 0, 0); lv.RelativeTo = Enum.ActuatorRelativeTo.World
+        local align = Instance.new("AlignOrientation", HRP); align.Name = "FlyAlign"; align.Attachment0 = attachment; align.Mode = Enum.OrientationAlignmentMode.OneAttachment; align.MaxTorque = math.huge; align.CFrame = workspace.CurrentCamera.CFrame
+        flyLoop = RunService.RenderStepped:Connect(function()
+            local cam = workspace.CurrentCamera; align.CFrame = cam.CFrame
+            local moveDir = Vector3.new(0,0,0)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+            if moveDir.Magnitude > 0 then moveDir = moveDir.Unit end; lv.VectorVelocity = moveDir * NebulaConfig.Sliders.FlySpeed
+        end)
+    else
+        Humanoid.PlatformStand = false; Humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        if HRP:FindFirstChild("FlyAttachment") then HRP.FlyAttachment:Destroy() end
+        if HRP:FindFirstChild("FlyLinear") then HRP.FlyLinear:Destroy() end
+        if HRP:FindFirstChild("FlyAlign") then HRP.FlyAlign:Destroy() end
+        if flyLoop then flyLoop:Disconnect() end; HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0) 
+    end
+end
+local function ToggleFly() isFlying = not isFlying; UpdateUI(FlyToggle, isFlying); UpdateFly() end
+FlyToggle.MouseButton1Click:Connect(ToggleFly); SetupKeybind(FlyKey, "Fly", ToggleFly)
+
+local function UpdateSpeed()
+    if isSpeedEnabled then
+        speedLoop = RunService.RenderStepped:Connect(function()
+            local char = LocalPlayer.Character; if char and char:FindFirstChild("Humanoid") then char.Humanoid.WalkSpeed = NebulaConfig.Sliders.WalkSpeed end
+        end)
+    else
+        if speedLoop then speedLoop:Disconnect() end
+        local char = LocalPlayer.Character; if char and char:FindFirstChild("Humanoid") then char.Humanoid.WalkSpeed = 16 end
+    end
+end
+local function ToggleSpeed() isSpeedEnabled = not isSpeedEnabled; UpdateUI(SpeedToggle, isSpeedEnabled); UpdateSpeed() end
+SpeedToggle.MouseButton1Click:Connect(ToggleSpeed); SetupKeybind(SpeedKey, "WalkSpeed", ToggleSpeed)
+
+-- KUSURSUZ SPINBOT
+local function UpdateSpin()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChildOfClass("Humanoid") then return end
+    
+    local HRP = char.HumanoidRootPart
+    local Humanoid = char:FindFirstChildOfClass("Humanoid")
+    
+    if isSpinning then
+        Humanoid.AutoRotate = false
+        if HRP:FindFirstChild("NebulaSpin") then HRP.NebulaSpin:Destroy() end
+        
+        local spinForce = Instance.new("BodyAngularVelocity", HRP)
+        spinForce.Name = "NebulaSpin"
+        spinForce.MaxTorque = Vector3.new(0, math.huge, 0)
+        
+        spinLoop = RunService.RenderStepped:Connect(function() 
+            if spinForce and spinForce.Parent then 
+                spinForce.AngularVelocity = Vector3.new(0, NebulaConfig.Sliders.SpinSpeed / 5, 0) 
+            end 
+        end)
+    else
+        Humanoid.AutoRotate = true
+        if spinLoop then spinLoop:Disconnect() end
+        if HRP:FindFirstChild("NebulaSpin") then HRP.NebulaSpin:Destroy() end
+    end
+end
+local function ToggleSpin() isSpinning = not isSpinning; UpdateUI(SpinToggle, isSpinning); UpdateSpin() end
+SpinToggle.MouseButton1Click:Connect(ToggleSpin); SetupKeybind(SpinKey, "Spin", ToggleSpin)
+
+local function UpdateJump()
+    if isInfJumpEnabled then
+        infJumpConnection = UserInputService.JumpRequest:Connect(function()
+            local char = LocalPlayer.Character; if char and char:FindFirstChild("Humanoid") then char.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end)
+    else
+        if infJumpConnection then infJumpConnection:Disconnect() end
+    end
+end
+local function ToggleJump() isInfJumpEnabled = not isInfJumpEnabled; UpdateUI(JumpToggle, isInfJumpEnabled); UpdateJump() end
+JumpToggle.MouseButton1Click:Connect(ToggleJump); SetupKeybind(JumpKey, "Jump", ToggleJump)
+
+local function UpdateNoclip()
+    if isNoclipEnabled then
+        noclipLoop = RunService.Stepped:Connect(function()
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+                end
+            end
+        end)
+    else 
+        if noclipLoop then noclipLoop:Disconnect() end 
+    end
+end
+local function ToggleNoclip() isNoclipEnabled = not isNoclipEnabled; UpdateUI(NoclipToggle, isNoclipEnabled); UpdateNoclip() end
+NoclipToggle.MouseButton1Click:Connect(ToggleNoclip); SetupKeybind(NoclipKey, "Noclip", ToggleNoclip)
+
+PlayerPanelToggle.MouseButton1Click:Connect(function()
+    PlayerPanelFrame.Visible = not PlayerPanelFrame.Visible
+    UpdateUI(PlayerPanelToggle, PlayerPanelFrame.Visible)
+end)
+
+
+-- ==========================================
+-- // YENİ: LOKASYON / IŞINLANMA SEKME MODÜLLERİ //
+-- ==========================================
+local SavePosBtn, SavePosLbl = CreateActionModule("📍 Pozisyon Kaydet", "KAYDET", LocScrollFrame)
+local LoadPosBtn, LoadPosLbl = CreateActionModule("⚡ Pozisyon TP", "IŞINLAN", LocScrollFrame)
+local AutoTPMod, AutoTPToggle, _, AutoTPKey = CreateModule("⏱️ Otomatik TP (0.9 Saniye)", false, LocScrollFrame)
+
+-- 1. Pozisyonu Hafızaya Kaydetme
+SavePosBtn.MouseButton1Click:Connect(function()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        savedCFrame = char.HumanoidRootPart.CFrame
+        SavePosBtn.Text = "KAYDEDİLDİ!"
+        SavePosBtn.BackgroundColor3 = Color3.fromRGB(80, 255, 80)
+        task.delay(1, function()
+            SavePosBtn.Text = "KAYDET"
+            SavePosBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234)
+        end)
+    end
+end)
+
+-- 2. Kaydedilen Pozisyona Tek Seferlik Dönme
+LoadPosBtn.MouseButton1Click:Connect(function()
+    if savedCFrame then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.CFrame = savedCFrame
+            char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
+        end
+    else
+        LoadPosBtn.Text = "KAYIT YOK!"
+        LoadPosBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+        task.delay(1, function()
+            LoadPosBtn.Text = "IŞINLAN"
+            LoadPosBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234)
+        end)
+    end
+end)
+
+-- 3. Otomatik Hit & Run (0.9 Saniyede Bir Dönüş)
+local function UpdateAutoTP()
+    if isAutoTPEnabled then
+        autoTPLoopConn = RunService.Stepped:Connect(function()
+            -- 0.9 saniyede bir TP atar. Bu süre içinde adam serbestçe hareket edebilir.
+            if tick() - lastTPTime >= 0.9 then
+                lastTPTime = tick()
+                if savedCFrame and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = savedCFrame
+                    -- İvmeyi sıfırla ki havada kayma olmasın
+                    LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                end
+            end
+        end)
+    else
+        if autoTPLoopConn then autoTPLoopConn:Disconnect(); autoTPLoopConn = nil end
+    end
+end
+local function ToggleAutoTP() 
+    if not savedCFrame then
+        AutoTPToggle.Text = "KAYIT YOK"
+        task.delay(1, function() UpdateUI(AutoTPToggle, isAutoTPEnabled) end)
+        return
+    end
+    isAutoTPEnabled = not isAutoTPEnabled; 
+    UpdateUI(AutoTPToggle, isAutoTPEnabled); 
+    UpdateAutoTP() 
+end
+AutoTPToggle.MouseButton1Click:Connect(ToggleAutoTP); SetupKeybind(AutoTPKey, "AutoTP", ToggleAutoTP)
+
+
+-- // İZLEME (SPECTATE) SİSTEMİ //
+local function UpdateSpectate()
+    if spectateConn then spectateConn:Disconnect(); spectateConn = nil end
+    if spectatedPlayer then
+        local function ApplyCamera()
+            if spectatedPlayer and spectatedPlayer.Character and spectatedPlayer.Character:FindFirstChild("Humanoid") then
+                workspace.CurrentCamera.CameraSubject = spectatedPlayer.Character.Humanoid
+            end
+        end
+        ApplyCamera()
+        spectateConn = spectatedPlayer.CharacterAdded:Connect(function(char) task.wait(0.5); ApplyCamera() end)
+    else
+        local myChar = LocalPlayer.Character
+        if myChar and myChar:FindFirstChild("Humanoid") then workspace.CurrentCamera.CameraSubject = myChar.Humanoid end
+    end
+end
+
+-- // YENİ ARD ARDA TP (LOOP TP) SİSTEMİ (SPINBOT İLE UYUMLU) //
+local function UpdateAttach()
+    if attachLoop then attachLoop:Disconnect(); attachLoop = nil end
+    if attachedPlayer then
+        attachLoop = RunService.Heartbeat:Connect(function()
+            local lChar = LocalPlayer.Character
+            local tChar = attachedPlayer.Character
+            if lChar and tChar then
+                local lHRP = lChar:FindFirstChild("HumanoidRootPart")
+                local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+                if lHRP and tHRP then
+                    lHRP.CFrame = CFrame.new(tHRP.Position) * (lHRP.CFrame - lHRP.Position)
+                end
+            end
+        end)
+    end
+end
+
+-- // AKTİF OYUNCULAR (LİSTE OLUŞTURUCU) //
+local function RefreshPlayerList()
+    for _, child in ipairs(PlayerScrollFrame:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+
+        local PFrame = Instance.new("Frame", PlayerScrollFrame)
+        PFrame.Size = UDim2.new(1, -20, 0, 50); PFrame.BackgroundColor3 = Color3.fromRGB(30, 25, 45); PFrame.ZIndex = 12
+        Instance.new("UICorner", PFrame).CornerRadius = UDim.new(0, 8)
+
+        local Avatar = Instance.new("ImageLabel", PFrame)
+        Avatar.Size = UDim2.new(0, 40, 0, 40); Avatar.Position = UDim2.new(0, 5, 0, 5); Avatar.BackgroundColor3 = Color3.fromRGB(15, 15, 15); Avatar.ZIndex = 13
+        Instance.new("UICorner", Avatar).CornerRadius = UDim.new(1, 0)
+        coroutine.wrap(function()
+            local thumb = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+            Avatar.Image = thumb
+        end)()
+
+        local NameLbl = Instance.new("TextLabel", PFrame)
+        NameLbl.Size = UDim2.new(0, 160, 1, 0); NameLbl.Position = UDim2.new(0, 55, 0, 0); NameLbl.BackgroundTransparency = 1; NameLbl.ZIndex = 13
+        NameLbl.Text = player.DisplayName .. "\n(@" .. player.Name .. ")"; NameLbl.TextColor3 = Color3.fromRGB(230, 230, 230); NameLbl.Font = Enum.Font.GothamSemibold; NameLbl.TextSize = 11; NameLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+        local TPBtn = Instance.new("TextButton", PFrame)
+        TPBtn.Size = UDim2.new(0, 35, 0, 30); TPBtn.Position = UDim2.new(1, -40, 0, 10); TPBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234); TPBtn.ZIndex = 14
+        TPBtn.Text = "TP"; TPBtn.TextColor3 = Color3.fromRGB(255, 255, 255); TPBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", TPBtn).CornerRadius = UDim.new(0, 6)
+        TPBtn.MouseButton1Click:Connect(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+            end
+        end)
+
+        local AttachBtn = Instance.new("TextButton", PFrame)
+        AttachBtn.Size = UDim2.new(0, 35, 0, 30); AttachBtn.Position = UDim2.new(1, -80, 0, 10); AttachBtn.ZIndex = 14
+        AttachBtn.BackgroundColor3 = (attachedPlayer == player) and Color3.fromRGB(255, 60, 100) or Color3.fromRGB(60, 50, 80)
+        AttachBtn.Text = "🧲"; AttachBtn.TextColor3 = Color3.fromRGB(255, 255, 255); AttachBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", AttachBtn).CornerRadius = UDim.new(0, 6)
+        AttachBtn.MouseButton1Click:Connect(function()
+            if attachedPlayer == player then attachedPlayer = nil else attachedPlayer = player end
+            UpdateAttach()
+            RefreshPlayerList()
+        end)
+
+        local ESPBtn = Instance.new("TextButton", PFrame)
+        ESPBtn.Size = UDim2.new(0, 45, 0, 30); ESPBtn.Position = UDim2.new(1, -130, 0, 10); ESPBtn.ZIndex = 14
+        ESPBtn.BackgroundColor3 = activeESPs[player] and Color3.fromRGB(80, 255, 80) or Color3.fromRGB(60, 50, 80)
+        ESPBtn.Text = "ESP"; ESPBtn.TextColor3 = Color3.fromRGB(255, 255, 255); ESPBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", ESPBtn).CornerRadius = UDim.new(0, 6)
+        ESPBtn.MouseButton1Click:Connect(function()
+            activeESPs[player] = not activeESPs[player]
+            if activeESPs[player] then ESPBtn.BackgroundColor3 = Color3.fromRGB(80, 255, 80); ApplyESP(player)
+            else ESPBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80); if not isGlobalESPEnabled then RemoveESP(player) end end
+        end)
+
+        local SpecBtn = Instance.new("TextButton", PFrame)
+        SpecBtn.Size = UDim2.new(0, 35, 0, 30); SpecBtn.Position = UDim2.new(1, -170, 0, 10); SpecBtn.ZIndex = 14
+        SpecBtn.BackgroundColor3 = (spectatedPlayer == player) and Color3.fromRGB(255, 165, 0) or Color3.fromRGB(60, 50, 80)
+        SpecBtn.Text = "👁️"; SpecBtn.TextColor3 = Color3.fromRGB(255, 255, 255); SpecBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", SpecBtn).CornerRadius = UDim.new(0, 6)
+        SpecBtn.MouseButton1Click:Connect(function()
+            if spectatedPlayer == player then spectatedPlayer = nil else spectatedPlayer = player end
+            UpdateSpectate()
+            RefreshPlayerList()
+        end)
+    end
+end
+
+Players.PlayerAdded:Connect(function(player) RefreshPlayerList(); player.CharacterAdded:Connect(function() task.wait(1); if activeESPs[player] or isGlobalESPEnabled then ApplyESP(player) end end) end)
+Players.PlayerRemoving:Connect(function(player) 
+    activeESPs[player] = nil
+    if spectatedPlayer == player then spectatedPlayer = nil; UpdateSpectate() end
+    if attachedPlayer == player then attachedPlayer = nil; UpdateAttach() end
+    RefreshPlayerList() 
+end)
+for _, p in ipairs(Players:GetPlayers()) do p.CharacterAdded:Connect(function() task.wait(1); if activeESPs[p] or isGlobalESPEnabled then ApplyESP(p) end end) end
+RefreshPlayerList()
+
+-- ==========================================
+-- // MM2 ÖZEL SEKME FONKSİYONLARI //
+-- ==========================================
+local MM2ESPMod, MM2ESPToggle, _, MM2ESPKey = CreateModule("🔪 MM2 Rol ESP (Şerif/Katil)", false, MM2ScrollFrame)
+local AutoGrabMod, AutoGrabToggle, _, AutoGrabKey = CreateModule("🔫 Auto Grab Gun (Silah Kap)", false, MM2ScrollFrame)
+
+local function UpdateMM2ESP()
+    if isMM2ESPEnabled then
+        mm2ESPLoop = RunService.RenderStepped:Connect(function()
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    local role = "Masum"
+                    local color = Color3.fromRGB(0, 255, 0)
+
+                    local function checkTools(parent)
+                        if not parent then return end
+                        for _, item in ipairs(parent:GetChildren()) do
+                            if item:IsA("Tool") then
+                                if item.Name == "Gun" then
+                                    role = "Şerif"; color = Color3.fromRGB(0, 0, 255)
+                                elseif item.Name ~= "Compass" and item.Name ~= "Radio" and item.Name ~= "Teddy" and item.Name ~= "Gun" then
+                                    role = "Katil"; color = Color3.fromRGB(255, 0, 0)
+                                end
+                            end
+                        end
+                    end
+                    checkTools(player.Backpack); checkTools(player.Character)
+
+                    local hl = player.Character:FindFirstChild("MM2RoleESP")
+                    if not hl then
+                        hl = Instance.new("Highlight"); hl.Name = "MM2RoleESP"; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = player.Character
+                        local bill = Instance.new("BillboardGui", hl); bill.Name = "RoleText"; bill.Size = UDim2.new(0, 100, 0, 30); bill.StudsOffset = Vector3.new(0, 3.5, 0); bill.AlwaysOnTop = true
+                        local txt = Instance.new("TextLabel", bill); txt.Size = UDim2.new(1, 0, 1, 0); txt.BackgroundTransparency = 1; txt.Font = Enum.Font.GothamBlack; txt.TextSize = 16; txt.TextStrokeTransparency = 0
+                    end
+                    hl.FillColor = color; hl.OutlineColor = color; hl.FillTransparency = 0.6
+                    local textLabel = hl.RoleText:FindFirstChildOfClass("TextLabel")
+                    if textLabel then textLabel.Text = role; textLabel.TextColor3 = color end
+                end
+            end
+        end)
+    else
+        if mm2ESPLoop then mm2ESPLoop:Disconnect() end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character and player.Character:FindFirstChild("MM2RoleESP") then player.Character.MM2RoleESP:Destroy() end
+        end
+    end
+end
+local function ToggleMM2ESP() isMM2ESPEnabled = not isMM2ESPEnabled; UpdateUI(MM2ESPToggle, isMM2ESPEnabled); UpdateMM2ESP() end
+MM2ESPToggle.MouseButton1Click:Connect(ToggleMM2ESP); SetupKeybind(MM2ESPKey, "MM2ESP", ToggleMM2ESP)
+
+local function UpdateAutoGrab()
+    if isAutoGrabEnabled then
+        autoGrabLoop = RunService.Stepped:Connect(function()
+            local gunDrop = workspace:FindFirstChild("GunDrop")
+            if gunDrop and not grabbingGun and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                grabbingGun = true
+                local hrp = LocalPlayer.Character.HumanoidRootPart
+                local oldPos = hrp.CFrame
+                hrp.CFrame = gunDrop.CFrame
+                task.spawn(function()
+                    task.wait(0.3)
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then hrp.CFrame = oldPos end
+                    task.wait(1)
+                    grabbingGun = false
+                end)
+            end
+        end)
+    else
+        if autoGrabLoop then autoGrabLoop:Disconnect() end
+    end
+end
+local function ToggleAutoGrab() isAutoGrabEnabled = not isAutoGrabEnabled; UpdateUI(AutoGrabToggle, isAutoGrabEnabled); UpdateAutoGrab() end
+AutoGrabToggle.MouseButton1Click:Connect(ToggleAutoGrab); SetupKeybind(AutoGrabKey, "AutoGrab", ToggleAutoGrab)
+
+
+-- // KAPATMA BÖLÜMÜ //
+CloseBtn.MouseButton1Click:Connect(function()
+    isFlying = false; UpdateFly()
+    isSpeedEnabled = false; UpdateSpeed()
+    isSpinning = false; UpdateSpin() 
+    isNoclipEnabled = false; UpdateNoclip()
+    isGlobalESPEnabled = false; UpdateGlobalESP()
+    isMM2ESPEnabled = false; UpdateMM2ESP()
+    isAutoGrabEnabled = false; UpdateAutoGrab()
+    isAutoTPEnabled = false; UpdateAutoTP()
+    
+    spectatedPlayer = nil; UpdateSpectate()
+    attachedPlayer = nil; UpdateAttach()
+    
+    for _, p in ipairs(Players:GetPlayers()) do RemoveESP(p) end
+    for _, conn in ipairs(eventConnections) do if conn then conn:Disconnect() end end
+    ScreenGui:Destroy()
+end)
