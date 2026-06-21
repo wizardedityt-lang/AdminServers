@@ -753,7 +753,6 @@ local function RefreshPlayerList()
         end)()
 
         local NameLbl = Instance.new("TextLabel", PFrame)
-        -- Genişliği azalttık ki Fling butonu ile üst üste binmesin.
         NameLbl.Size = UDim2.new(0, 130, 1, 0); NameLbl.Position = UDim2.new(0, 55, 0, 0); NameLbl.BackgroundTransparency = 1; NameLbl.ZIndex = 13
         NameLbl.Text = player.DisplayName .. "\n(@" .. player.Name .. ")"; NameLbl.TextColor3 = Color3.fromRGB(230, 230, 230); NameLbl.Font = Enum.Font.GothamSemibold; NameLbl.TextSize = 11; NameLbl.TextXAlignment = Enum.TextXAlignment.Left
 
@@ -794,7 +793,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 Fling Butonu
+        -- 🌀 GELİŞTİRİLMİŞ ULTRA FLING BUTONU (5 SANİYE)
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -814,13 +813,23 @@ local function RefreshPlayerList()
                     local myHRP = myChar.HumanoidRootPart
                     local tHRP = tChar.HumanoidRootPart
                     local oldCFrame = myHRP.CFrame
+                    local hum = myChar:FindFirstChildOfClass("Humanoid")
                     
-                    local bg = Instance.new("BodyAngularVelocity", myHRP)
-                    bg.AngularVelocity = Vector3.new(0, 99999, 0)
-                    bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                    bg.P = math.huge
+                    if hum then hum.PlatformStand = true end
                     
-                    local flingDuration = 0.5
+                    local bav = Instance.new("BodyAngularVelocity")
+                    bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
+                    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    bav.P = math.huge
+                    bav.Parent = myHRP
+                    
+                    local thrust = Instance.new("BodyThrust")
+                    thrust.Force = Vector3.new(99999, 99999, 99999)
+                    thrust.Location = myHRP.Position
+                    thrust.Parent = myHRP
+
+                    -- SÜRE 5 SANİYEYE ÇIKARILDI
+                    local flingDuration = 5.0
                     local startTime = tick()
                     
                     local conn
@@ -829,20 +838,22 @@ local function RefreshPlayerList()
                             conn:Disconnect()
                             return
                         end
-                        -- Rakibin içine girebilmek için geçici Noclip (çarpışmaları iptal etme)
-                        for _, part in ipairs(myChar:GetDescendants()) do
-                            if part:IsA("BasePart") then part.CanCollide = false end
-                        end
                         
-                        myHRP.CFrame = tHRP.CFrame
-                        myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                        myHRP.AssemblyAngularVelocity = Vector3.new(0, 99999, 0)
+                        if tChar and tChar:FindFirstChild("HumanoidRootPart") then
+                            -- Noclip kapalı! Böylece çarpışmalar şiddetli olarak hesaba katılır.
+                            -- Hedefin içine milimetrik olarak rastgele bir konuma ışınlanıp muazzam bir itme kuvveti oluşturur
+                            myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-2, 2)/10, math.random(-2, 2)/10, math.random(-2, 2)/10)
+                            myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            myHRP.AssemblyAngularVelocity = Vector3.new(999999, 999999, 999999)
+                        end
                     end)
                     
                     task.wait(flingDuration + 0.1)
                     if conn then conn:Disconnect() end
-                    if bg then bg:Destroy() end
+                    if bav then bav:Destroy() end
+                    if thrust then thrust:Destroy() end
                     
+                    if hum then hum.PlatformStand = false end
                     myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                     myHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                     myHRP.CFrame = oldCFrame
