@@ -358,7 +358,7 @@ local function SetupSlider(SliderObj, configKey, maxValue, callback, allowExceed
         if not (allowExceedLimit and fromInput) then
             val = math.clamp(math.floor(val), 1, maxValue)
         else
-            val = math.max(1, math.floor(val)) -- Sadece eksi sayılara inmesini engeller, limiti sonsuza çıkarır
+            val = math.max(1, math.floor(val))
         end
         
         SliderObj.Fill.Size = UDim2.new(math.clamp(val / maxValue, 0, 1), 0, 1, 0)
@@ -442,8 +442,6 @@ local PlayerPanelMod, PlayerPanelToggle, _, _ = CreateModule("👥 Aktif Oyuncul
 
 SetupSlider(FlySlider, "FlySpeed", maxFlySpeed, function(val) NebulaConfig.Sliders.FlySpeed = val end, false)
 SetupSlider(SpeedSlider, "WalkSpeed", maxWalkSpeed, function(val) NebulaConfig.Sliders.WalkSpeed = val end, false)
-
--- Spinbot için Text Box sınırını Kaldırdık (true gönderildi)
 SetupSlider(SpinSlider, "SpinSpeed", maxSpinSpeed, function(val) NebulaConfig.Sliders.SpinSpeed = val end, true)
 
 local function ApplyESP(player)
@@ -755,7 +753,8 @@ local function RefreshPlayerList()
         end)()
 
         local NameLbl = Instance.new("TextLabel", PFrame)
-        NameLbl.Size = UDim2.new(0, 160, 1, 0); NameLbl.Position = UDim2.new(0, 55, 0, 0); NameLbl.BackgroundTransparency = 1; NameLbl.ZIndex = 13
+        -- Genişliği azalttık ki Fling butonu ile üst üste binmesin.
+        NameLbl.Size = UDim2.new(0, 130, 1, 0); NameLbl.Position = UDim2.new(0, 55, 0, 0); NameLbl.BackgroundTransparency = 1; NameLbl.ZIndex = 13
         NameLbl.Text = player.DisplayName .. "\n(@" .. player.Name .. ")"; NameLbl.TextColor3 = Color3.fromRGB(230, 230, 230); NameLbl.Font = Enum.Font.GothamSemibold; NameLbl.TextSize = 11; NameLbl.TextXAlignment = Enum.TextXAlignment.Left
 
         local TPBtn = Instance.new("TextButton", PFrame)
@@ -793,6 +792,65 @@ local function RefreshPlayerList()
         SpecBtn.MouseButton1Click:Connect(function()
             if spectatedPlayer == player then spectatedPlayer = nil else spectatedPlayer = player end
             UpdateSpectate(); RefreshPlayerList()
+        end)
+
+        -- 🌀 Fling Butonu
+        local FlingBtn = Instance.new("TextButton", PFrame)
+        FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
+        FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
+        FlingBtn.Text = "🌀"; FlingBtn.TextColor3 = Color3.fromRGB(255, 255, 255); FlingBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", FlingBtn).CornerRadius = UDim.new(0, 6)
+        
+        local isFlinging = false
+        FlingBtn.MouseButton1Click:Connect(function()
+            if isFlinging then return end
+            local myChar = LocalPlayer.Character
+            local tChar = player.Character
+            
+            if myChar and tChar and myChar:FindFirstChild("HumanoidRootPart") and tChar:FindFirstChild("HumanoidRootPart") then
+                isFlinging = true
+                FlingBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+                
+                task.spawn(function()
+                    local myHRP = myChar.HumanoidRootPart
+                    local tHRP = tChar.HumanoidRootPart
+                    local oldCFrame = myHRP.CFrame
+                    
+                    local bg = Instance.new("BodyAngularVelocity", myHRP)
+                    bg.AngularVelocity = Vector3.new(0, 99999, 0)
+                    bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    bg.P = math.huge
+                    
+                    local flingDuration = 0.5
+                    local startTime = tick()
+                    
+                    local conn
+                    conn = RunService.Stepped:Connect(function()
+                        if tick() - startTime > flingDuration then
+                            conn:Disconnect()
+                            return
+                        end
+                        -- Rakibin içine girebilmek için geçici Noclip (çarpışmaları iptal etme)
+                        for _, part in ipairs(myChar:GetDescendants()) do
+                            if part:IsA("BasePart") then part.CanCollide = false end
+                        end
+                        
+                        myHRP.CFrame = tHRP.CFrame
+                        myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        myHRP.AssemblyAngularVelocity = Vector3.new(0, 99999, 0)
+                    end)
+                    
+                    task.wait(flingDuration + 0.1)
+                    if conn then conn:Disconnect() end
+                    if bg then bg:Destroy() end
+                    
+                    myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    myHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    myHRP.CFrame = oldCFrame
+                    
+                    isFlinging = false
+                    FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
+                end)
+            end
         end)
     end
 end
