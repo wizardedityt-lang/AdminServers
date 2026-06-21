@@ -18,7 +18,8 @@ local NebulaConfig = {
     Keybinds = {
         Fly = "F", WalkSpeed = "Z", Spin = "C",
         Jump = "None", Noclip = "None", GlobalESP = "E",
-        AutoTP = "None", MM2ESP = "None", AutoGrab = "None", AntiFling = "None"
+        AutoTP = "None", MM2ESP = "None", AutoGrab = "None", AntiFling = "None",
+        MenuToggle = "RightShift" -- Menü aç kapa varsayılan tuş
     }
 }
 
@@ -58,7 +59,7 @@ local attachedPlayer = nil
 local attachLoop = nil
 
 -- Lokasyon / Otomatik TP Değişkenleri
-local activeTplocation = nil -- Auto TP için seçili hedef
+local activeTplocation = nil 
 local isAutoTPEnabled = false
 local autoTPLoopConn = nil
 local lastTPTime = 0
@@ -152,10 +153,10 @@ TabBar.ZIndex = 11
 local TabListLayout = Instance.new("UIListLayout", TabBar)
 TabListLayout.FillDirection = Enum.FillDirection.Horizontal
 TabListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-TabListLayout.Padding = UDim.new(0, 8)
+TabListLayout.Padding = UDim.new(0, 5)
 
 local function SetTabBtn(btn, text)
-    btn.Size = UDim2.new(0.31, 0, 1, 0)
+    btn.Size = UDim2.new(0.23, 0, 1, 0)
     btn.Text = text
     btn.Font = Enum.Font.GothamBold
     btn.ZIndex = 12
@@ -176,6 +177,11 @@ local MM2TabBtn = Instance.new("TextButton", TabBar)
 SetTabBtn(MM2TabBtn, "MM2")
 MM2TabBtn.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
 MM2TabBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+
+local SettingsTabBtn = Instance.new("TextButton", TabBar)
+SetTabBtn(SettingsTabBtn, "AYARLAR")
+SettingsTabBtn.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+SettingsTabBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 
 -- KAYDIRMA ALANLARI
 local function CreateScrollFrame()
@@ -200,12 +206,14 @@ end
 local MainScrollFrame = CreateScrollFrame()
 local LocScrollFrame = CreateScrollFrame()
 local MM2ScrollFrame = CreateScrollFrame()
+local SettingsScrollFrame = CreateScrollFrame()
 LocScrollFrame.Visible = false
 MM2ScrollFrame.Visible = false
+SettingsScrollFrame.Visible = false
 
 local function SwitchTab(activeBtn, activeFrame)
-    local frames = {MainScrollFrame, LocScrollFrame, MM2ScrollFrame}
-    local btns = {MainTabBtn, LocTabBtn, MM2TabBtn}
+    local frames = {MainScrollFrame, LocScrollFrame, MM2ScrollFrame, SettingsScrollFrame}
+    local btns = {MainTabBtn, LocTabBtn, MM2TabBtn, SettingsTabBtn}
     
     for _, f in ipairs(frames) do f.Visible = (f == activeFrame) end
     for _, b in ipairs(btns) do
@@ -220,6 +228,7 @@ end
 MainTabBtn.MouseButton1Click:Connect(function() SwitchTab(MainTabBtn, MainScrollFrame) end)
 LocTabBtn.MouseButton1Click:Connect(function() SwitchTab(LocTabBtn, LocScrollFrame) end)
 MM2TabBtn.MouseButton1Click:Connect(function() SwitchTab(MM2TabBtn, MM2ScrollFrame) end)
+SettingsTabBtn.MouseButton1Click:Connect(function() SwitchTab(SettingsTabBtn, SettingsScrollFrame) end)
 
 -- // AKTİF OYUNCULAR (PANEL GUI) //
 local PlayerPanelFrame = Instance.new("Frame")
@@ -597,7 +606,7 @@ local PozListFrame = Instance.new("Frame", LocScrollFrame)
 PozListFrame.Size = UDim2.new(1, -20, 0, 0)
 PozListFrame.BackgroundTransparency = 1
 PozListFrame.ClipsDescendants = true
-PozListFrame.Visible = true -- Başlangıçta açık başlasın
+PozListFrame.Visible = true
 
 local PozListLayout = Instance.new("UIListLayout", PozListFrame)
 PozListLayout.Padding = UDim.new(0, 5)
@@ -630,7 +639,7 @@ AddPosBtn.MouseButton1Click:Connect(function()
         local cf = hrp.CFrame
         local posText = string.format("X: %d  Y: %d  Z: %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
 
-        activeTplocation = cf -- Yeni eklendiğinde otomatik olarak bunu hedef al
+        activeTplocation = cf
 
         local ItemFrame = Instance.new("Frame", PozListFrame)
         ItemFrame.Size = UDim2.new(1, 0, 0, 40)
@@ -663,7 +672,7 @@ AddPosBtn.MouseButton1Click:Connect(function()
             if c and c:FindFirstChild("HumanoidRootPart") then
                 c.HumanoidRootPart.CFrame = cf
                 c.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
-                activeTplocation = cf -- Işınlanınca Auto TP için yeni hedef bu lokasyon olur
+                activeTplocation = cf
             end
         end)
 
@@ -679,7 +688,7 @@ local AutoTPMod, AutoTPToggle, _, AutoTPKey = CreateModule("⏱️ Otomatik TP (
 local function UpdateAutoTP()
     if isAutoTPEnabled then
         autoTPLoopConn = RunService.Stepped:Connect(function()
-            if tick() - lastTPTime >= 2.0 then -- 2 Saniye aralıklarla ışınlar
+            if tick() - lastTPTime >= 2.0 then 
                 lastTPTime = tick()
                 if activeTplocation and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     LocalPlayer.Character.HumanoidRootPart.CFrame = activeTplocation
@@ -1005,7 +1014,6 @@ local function UpdateAutoGrab()
                     end
                     
                     if dropCFrame then
-                        -- ADIM 1: SİLAHI LOKAL OLARAK (Senin ekranında) YANINA ÇEK
                         pcall(function()
                             if gunDrop:IsA("Model") then
                                 gunDrop:PivotTo(oldCFrame)
@@ -1014,15 +1022,12 @@ local function UpdateAutoGrab()
                             end
                         end)
 
-                        -- ADIM 2: EKRANIN ASLA TİTREMEMESİ İÇİN KAMERAYI GEÇİCİ OLARAK DONDUR
                         cam.CameraType = Enum.CameraType.Scriptable
                         cam.CFrame = oldCamCFrame
 
-                        -- ADIM 3: IŞIK HIZINDA (Anında) SİLAHA GİT
                         hrp.CFrame = dropCFrame
                         hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
                         
-                        -- Varsa FireTouchinterest ile silaha doğrudan "dokundum" sinyali gönder
                         if firetouchinterest then
                             if gunDrop:IsA("BasePart") then
                                 pcall(firetouchinterest, hrp, gunDrop, 0)
@@ -1036,10 +1041,8 @@ local function UpdateAutoGrab()
                             end
                         end
                         
-                        -- Sunucunun seni orda görüp silahı sana vermesi için YALNIZCA 1 FRAME (Saniyenin 60'ta 1'i) bekle
                         RunService.Heartbeat:Wait()
                         
-                        -- ADIM 4: IŞIK HIZINDA GERİ DÖN VE KAMERAYI ÇÖZ
                         hrp.CFrame = oldCFrame
                         hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
                         
@@ -1084,6 +1087,18 @@ local function UpdateAntiFling()
 end
 local function ToggleAntiFling() isAntiFlingEnabled = not isAntiFlingEnabled; UpdateUI(AntiFlingToggle, isAntiFlingEnabled); UpdateAntiFling() end
 AntiFlingToggle.MouseButton1Click:Connect(ToggleAntiFling); SetupKeybind(AntiFlingKey, "AntiFling", ToggleAntiFling)
+
+-- ==========================================
+-- // AYARLAR SEKME MODÜLLERİ //
+-- ==========================================
+local MenuToggleMod, MenuToggleBtn_Hiden, _, MenuToggleKey = CreateModule("👁️ Menü Göster / Gizle", false, SettingsScrollFrame)
+MenuToggleBtn_Hiden.Visible = false -- Modülün aç/kapa tuşunu gizleyip sadece tuş atama bırakıyoruz.
+MenuToggleKey.Position = UDim2.new(1, -75, 0, 10)
+
+local function ToggleMenuVisibility()
+    ScreenGui.Enabled = not ScreenGui.Enabled
+end
+SetupKeybind(MenuToggleKey, "MenuToggle", ToggleMenuVisibility)
 
 -- // KAPATMA BÖLÜMÜ //
 CloseBtn.MouseButton1Click:Connect(function()
