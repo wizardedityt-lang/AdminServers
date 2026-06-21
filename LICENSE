@@ -58,7 +58,7 @@ local attachedPlayer = nil
 local attachLoop = nil
 
 -- Lokasyon / Otomatik TP Değişkenleri
-local savedCFrame = nil
+local activeTplocation = nil -- Auto TP için seçili hedef
 local isAutoTPEnabled = false
 local autoTPLoopConn = nil
 local lastTPTime = 0
@@ -304,29 +304,6 @@ local function CreateModule(name, hasSlider, parentFrame)
         SliderParts = {Bar = SBar, Fill = SFill, Knob = SKnob, Input = SInput}
     end
     return Frame, ToggleBtn, SliderParts, KeybindBtn
-end
-
--- SADE BUTON MODÜLÜ
-local function CreateActionModule(name, btnText, parentFrame)
-    local Frame = Instance.new("Frame", parentFrame)
-    Frame.Size = UDim2.new(1, -20, 0, 50)
-    Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    Frame.BackgroundTransparency = 0.5
-    Frame.ZIndex = 15
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
-
-    local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(0, 180, 0, 30); Label.Position = UDim2.new(0, 15, 0, 10); Label.BackgroundTransparency = 1
-    Label.Text = name; Label.TextColor3 = Color3.fromRGB(230, 230, 230); Label.Font = Enum.Font.GothamSemibold
-    Label.TextSize = 14; Label.TextXAlignment = Enum.TextXAlignment.Left; Label.ZIndex = 16
-
-    local ActionBtn = Instance.new("TextButton", Frame)
-    ActionBtn.Size = UDim2.new(0, 100, 0, 30); ActionBtn.Position = UDim2.new(1, -115, 0, 10)
-    ActionBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234); ActionBtn.Text = btnText
-    ActionBtn.TextColor3 = Color3.fromRGB(255, 255, 255); ActionBtn.Font = Enum.Font.GothamBold; ActionBtn.TextSize = 12; ActionBtn.ZIndex = 17
-    Instance.new("UICorner", ActionBtn).CornerRadius = UDim.new(0, 6)
-
-    return ActionBtn, Label
 end
 
 local function UpdateUI(toggleBtn, state)
@@ -587,49 +564,125 @@ end)
 
 
 -- ==========================================
--- // LOKASYON / IŞINLANMA SEKME MODÜLLERİ //
+-- // LOKASYON / IŞINLANMA SEKME MODÜLLERİ (YENİ SİSTEM) //
 -- ==========================================
-local SavePosBtn, SavePosLbl = CreateActionModule("📍 Pozisyon Kaydet", "KAYDET", LocScrollFrame)
-local LoadPosBtn, LoadPosLbl = CreateActionModule("⚡ Pozisyon TP", "IŞINLAN", LocScrollFrame)
-local AutoTPMod, AutoTPToggle, _, AutoTPKey = CreateModule("⏱️ Otomatik TP (0.9 Saniye)", false, LocScrollFrame)
+local PozHeaderFrame = Instance.new("Frame", LocScrollFrame)
+PozHeaderFrame.Size = UDim2.new(1, -20, 0, 50)
+PozHeaderFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+PozHeaderFrame.BackgroundTransparency = 0.5
+PozHeaderFrame.ZIndex = 15
+Instance.new("UICorner", PozHeaderFrame).CornerRadius = UDim.new(0, 8)
 
-SavePosBtn.MouseButton1Click:Connect(function()
+local PozLabel = Instance.new("TextLabel", PozHeaderFrame)
+PozLabel.Size = UDim2.new(0, 150, 0, 30); PozLabel.Position = UDim2.new(0, 15, 0, 10)
+PozLabel.BackgroundTransparency = 1; PozLabel.Text = "📍 Pozisyonlar"
+PozLabel.TextColor3 = Color3.fromRGB(230, 230, 230); PozLabel.Font = Enum.Font.GothamSemibold
+PozLabel.TextSize = 14; PozLabel.TextXAlignment = Enum.TextXAlignment.Left; PozLabel.ZIndex = 16
+
+local AddPosBtn = Instance.new("TextButton", PozHeaderFrame)
+AddPosBtn.Size = UDim2.new(0, 80, 0, 30); AddPosBtn.Position = UDim2.new(1, -125, 0, 10)
+AddPosBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234); AddPosBtn.Text = "+ EKLE"
+AddPosBtn.TextColor3 = Color3.fromRGB(255, 255, 255); AddPosBtn.Font = Enum.Font.GothamBold
+AddPosBtn.TextSize = 12; AddPosBtn.ZIndex = 17
+Instance.new("UICorner", AddPosBtn).CornerRadius = UDim.new(0, 6)
+
+local DropdownBtn = Instance.new("TextButton", PozHeaderFrame)
+DropdownBtn.Size = UDim2.new(0, 30, 0, 30); DropdownBtn.Position = UDim2.new(1, -40, 0, 10)
+DropdownBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40); DropdownBtn.Text = "v"
+DropdownBtn.TextColor3 = Color3.fromRGB(255, 255, 255); DropdownBtn.Font = Enum.Font.GothamBold
+DropdownBtn.TextSize = 14; DropdownBtn.ZIndex = 17
+Instance.new("UICorner", DropdownBtn).CornerRadius = UDim.new(0, 6)
+
+local PozListFrame = Instance.new("Frame", LocScrollFrame)
+PozListFrame.Size = UDim2.new(1, -20, 0, 0)
+PozListFrame.BackgroundTransparency = 1
+PozListFrame.ClipsDescendants = true
+PozListFrame.Visible = true -- Başlangıçta açık başlasın
+
+local PozListLayout = Instance.new("UIListLayout", PozListFrame)
+PozListLayout.Padding = UDim.new(0, 5)
+PozListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+PozListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    if PozListFrame.Visible then
+        PozListFrame.Size = UDim2.new(1, -20, 0, PozListLayout.AbsoluteContentSize.Y)
+    end
+end)
+
+local isDropdownOpen = true
+DropdownBtn.MouseButton1Click:Connect(function()
+    isDropdownOpen = not isDropdownOpen
+    DropdownBtn.Text = isDropdownOpen and "v" or "^"
+    PozListFrame.Visible = isDropdownOpen
+    
+    if isDropdownOpen then
+        PozListFrame.Size = UDim2.new(1, -20, 0, PozListLayout.AbsoluteContentSize.Y)
+    else
+        PozListFrame.Size = UDim2.new(1, -20, 0, 0)
+    end
+end)
+
+AddPosBtn.MouseButton1Click:Connect(function()
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("HumanoidRootPart") then
-        savedCFrame = char.HumanoidRootPart.CFrame
-        SavePosBtn.Text = "KAYDEDİLDİ!"
-        SavePosBtn.BackgroundColor3 = Color3.fromRGB(80, 255, 80)
-        task.delay(1, function()
-            SavePosBtn.Text = "KAYDET"
-            SavePosBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234)
+        local hrp = char.HumanoidRootPart
+        local pos = hrp.Position
+        local cf = hrp.CFrame
+        local posText = string.format("X: %d  Y: %d  Z: %d", math.floor(pos.X), math.floor(pos.Y), math.floor(pos.Z))
+
+        activeTplocation = cf -- Yeni eklendiğinde otomatik olarak bunu hedef al
+
+        local ItemFrame = Instance.new("Frame", PozListFrame)
+        ItemFrame.Size = UDim2.new(1, 0, 0, 40)
+        ItemFrame.BackgroundColor3 = Color3.fromRGB(30, 25, 45)
+        ItemFrame.ZIndex = 15
+        Instance.new("UICorner", ItemFrame).CornerRadius = UDim.new(0, 6)
+
+        local CoordLbl = Instance.new("TextLabel", ItemFrame)
+        CoordLbl.Size = UDim2.new(0, 180, 1, 0); CoordLbl.Position = UDim2.new(0, 10, 0, 0)
+        CoordLbl.BackgroundTransparency = 1; CoordLbl.Text = posText
+        CoordLbl.TextColor3 = Color3.fromRGB(200, 200, 200); CoordLbl.Font = Enum.Font.GothamSemibold
+        CoordLbl.TextSize = 12; CoordLbl.TextXAlignment = Enum.TextXAlignment.Left; CoordLbl.ZIndex = 16
+
+        local TPBtn = Instance.new("TextButton", ItemFrame)
+        TPBtn.Size = UDim2.new(0, 45, 0, 26); TPBtn.Position = UDim2.new(1, -100, 0.5, -13)
+        TPBtn.BackgroundColor3 = Color3.fromRGB(80, 200, 80); TPBtn.Text = "TP"
+        TPBtn.TextColor3 = Color3.fromRGB(255, 255, 255); TPBtn.Font = Enum.Font.GothamBold
+        TPBtn.TextSize = 11; TPBtn.ZIndex = 16
+        Instance.new("UICorner", TPBtn).CornerRadius = UDim.new(0, 4)
+
+        local DelBtn = Instance.new("TextButton", ItemFrame)
+        DelBtn.Size = UDim2.new(0, 40, 0, 26); DelBtn.Position = UDim2.new(1, -50, 0.5, -13)
+        DelBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60); DelBtn.Text = "SİL"
+        DelBtn.TextColor3 = Color3.fromRGB(255, 255, 255); DelBtn.Font = Enum.Font.GothamBold
+        DelBtn.TextSize = 11; DelBtn.ZIndex = 16
+        Instance.new("UICorner", DelBtn).CornerRadius = UDim.new(0, 4)
+
+        TPBtn.MouseButton1Click:Connect(function()
+            local c = LocalPlayer.Character
+            if c and c:FindFirstChild("HumanoidRootPart") then
+                c.HumanoidRootPart.CFrame = cf
+                c.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                activeTplocation = cf -- Işınlanınca Auto TP için yeni hedef bu lokasyon olur
+            end
+        end)
+
+        DelBtn.MouseButton1Click:Connect(function()
+            if activeTplocation == cf then activeTplocation = nil end
+            ItemFrame:Destroy()
         end)
     end
 end)
 
-LoadPosBtn.MouseButton1Click:Connect(function()
-    if savedCFrame then
-        local char = LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            char.HumanoidRootPart.CFrame = savedCFrame
-            char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
-        end
-    else
-        LoadPosBtn.Text = "KAYIT YOK!"
-        LoadPosBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
-        task.delay(1, function()
-            LoadPosBtn.Text = "IŞINLAN"
-            LoadPosBtn.BackgroundColor3 = Color3.fromRGB(165, 94, 234)
-        end)
-    end
-end)
+local AutoTPMod, AutoTPToggle, _, AutoTPKey = CreateModule("⏱️ Otomatik TP (2 Saniye)", false, LocScrollFrame)
 
 local function UpdateAutoTP()
     if isAutoTPEnabled then
         autoTPLoopConn = RunService.Stepped:Connect(function()
-            if tick() - lastTPTime >= 0.9 then
+            if tick() - lastTPTime >= 2.0 then -- 2 Saniye aralıklarla ışınlar
                 lastTPTime = tick()
-                if savedCFrame and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = savedCFrame
+                if activeTplocation and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = activeTplocation
                     LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
                 end
             end
@@ -638,9 +691,10 @@ local function UpdateAutoTP()
         if autoTPLoopConn then autoTPLoopConn:Disconnect(); autoTPLoopConn = nil end
     end
 end
+
 local function ToggleAutoTP() 
-    if not savedCFrame then
-        AutoTPToggle.Text = "KAYIT YOK"
+    if not activeTplocation then
+        AutoTPToggle.Text = "SEÇİM YOK"
         task.delay(1, function() UpdateUI(AutoTPToggle, isAutoTPEnabled) end)
         return
     end
@@ -919,7 +973,7 @@ local function CheckIfHasGun(parent)
     return false
 end
 
--- 2. DİREKT SİLAHI ÇEKME & KAMERA KİLİTLİ "IŞIK HIZI (1 FRAME)" TP (EKRAN TİTREMEZ)
+-- DİREKT SİLAHI ÇEKME & KAMERA KİLİTLİ "IŞIK HIZI (1 FRAME)" TP (EKRAN TİTREMEZ)
 local function UpdateAutoGrab()
     if isAutoGrabEnabled then
         autoGrabLoop = RunService.Heartbeat:Connect(function()
@@ -960,7 +1014,7 @@ local function UpdateAutoGrab()
                             end
                         end)
 
-                        -- ADIM 2: EKRANIN ASLA TİTREMEMESİ İÇİN KAMERAYI GEÇİCİ OLARAK DONDUR (KİLİTLE)
+                        -- ADIM 2: EKRANIN ASLA TİTREMEMESİ İÇİN KAMERAYI GEÇİCİ OLARAK DONDUR
                         cam.CameraType = Enum.CameraType.Scriptable
                         cam.CFrame = oldCamCFrame
 
@@ -992,7 +1046,7 @@ local function UpdateAutoGrab()
                         cam.CameraType = Enum.CameraType.Custom
                     end
                     
-                    task.wait(0.2) -- Spam atıp lag yapmaması için kısa bir bekleme
+                    task.wait(0.2)
                     grabbingGun = false
                 end)
             end
@@ -1045,6 +1099,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     
     spectatedPlayer = nil; UpdateSpectate()
     attachedPlayer = nil; UpdateAttach()
+    activeTplocation = nil
     ClearAllMM2ESP()
     
     for _, p in ipairs(Players:GetPlayers()) do RemoveESP(p) end
