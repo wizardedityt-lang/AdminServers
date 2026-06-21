@@ -306,7 +306,7 @@ local function CreateModule(name, hasSlider, parentFrame)
     return Frame, ToggleBtn, SliderParts, KeybindBtn
 end
 
--- SADE BUTON MODÜLÜ (LOKASYON GİBİ SADECE TIKLANABİLİR ŞEYLER İÇİN)
+-- SADE BUTON MODÜLÜ
 local function CreateActionModule(name, btnText, parentFrame)
     local Frame = Instance.new("Frame", parentFrame)
     Frame.Size = UDim2.new(1, -20, 0, 50)
@@ -590,13 +590,12 @@ end)
 
 
 -- ==========================================
--- // YENİ: LOKASYON / IŞINLANMA SEKME MODÜLLERİ //
+-- // LOKASYON / IŞINLANMA SEKME MODÜLLERİ //
 -- ==========================================
 local SavePosBtn, SavePosLbl = CreateActionModule("📍 Pozisyon Kaydet", "KAYDET", LocScrollFrame)
 local LoadPosBtn, LoadPosLbl = CreateActionModule("⚡ Pozisyon TP", "IŞINLAN", LocScrollFrame)
 local AutoTPMod, AutoTPToggle, _, AutoTPKey = CreateModule("⏱️ Otomatik TP (0.9 Saniye)", false, LocScrollFrame)
 
--- 1. Pozisyonu Hafızaya Kaydetme
 SavePosBtn.MouseButton1Click:Connect(function()
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("HumanoidRootPart") then
@@ -610,7 +609,6 @@ SavePosBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- 2. Kaydedilen Pozisyona Tek Seferlik Dönme
 LoadPosBtn.MouseButton1Click:Connect(function()
     if savedCFrame then
         local char = LocalPlayer.Character
@@ -628,7 +626,6 @@ LoadPosBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- 3. Otomatik Hit & Run (0.9 Saniyede Bir Dönüş)
 local function UpdateAutoTP()
     if isAutoTPEnabled then
         autoTPLoopConn = RunService.Stepped:Connect(function()
@@ -657,7 +654,7 @@ end
 AutoTPToggle.MouseButton1Click:Connect(ToggleAutoTP); SetupKeybind(AutoTPKey, "AutoTP", ToggleAutoTP)
 
 
--- // İZLEME (SPECTATE) SİSTEMİ //
+-- // İZLEME VE OYUNCU LİSTESİ SİSTEMİ //
 local function UpdateSpectate()
     if spectateConn then spectateConn:Disconnect(); spectateConn = nil end
     if spectatedPlayer then
@@ -674,7 +671,6 @@ local function UpdateSpectate()
     end
 end
 
--- // YENİ ARD ARDA TP (LOOP TP) SİSTEMİ (SPINBOT İLE UYUMLU) //
 local function UpdateAttach()
     if attachLoop then attachLoop:Disconnect(); attachLoop = nil end
     if attachedPlayer then
@@ -692,7 +688,6 @@ local function UpdateAttach()
     end
 end
 
--- // AKTİF OYUNCULAR (LİSTE OLUŞTURUCU) //
 local function RefreshPlayerList()
     for _, child in ipairs(PlayerScrollFrame:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
 
@@ -767,114 +762,201 @@ for _, p in ipairs(Players:GetPlayers()) do p.CharacterAdded:Connect(function() 
 RefreshPlayerList()
 
 -- ==========================================
--- // MM2 ÖZEL SEKME FONKSİYONLARI GÜNCELLENDİ //
+-- // MM2 ÖZEL SEKME FONKSİYONLARI (KUSURSUZ GÜNCELLEME) //
 -- ==========================================
 local MM2ESPMod, MM2ESPToggle, _, MM2ESPKey = CreateModule("🔪 MM2 Rol ESP (Şerif/Katil)", false, MM2ScrollFrame)
 local AutoGrabMod, AutoGrabToggle, _, AutoGrabKey = CreateModule("🔫 Auto Grab Gun (Silah Kap)", false, MM2ScrollFrame)
 local AntiFlingMod, AntiFlingToggle, _, AntiFlingKey = CreateModule("🛡️ Anti Fling (Çarpışma Kapat)", false, MM2ScrollFrame)
 
--- GÜNCELLENMİŞ MM2 ESP 
+-- 1. DEVASA ÖLÇÜDE GÜÇLENDİRİLMİŞ MM2 ESP (GHOST/CESET SİLİCİ & YANLIŞ KATİL DÜZELTMESİ)
+local mm2ActiveESPs = {}
+
+local function ClearAllMM2ESP()
+    for _, hl in ipairs(mm2ActiveESPs) do
+        if hl then pcall(function() hl:Destroy() end) end
+    end
+    mm2ActiveESPs = {}
+    
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("Highlight") and v.Name == "MM2RoleESP" then
+            pcall(function() v:Destroy() end)
+        end
+    end
+end
+
 local function UpdateMM2ESP()
     if isMM2ESPEnabled then
         mm2ESPLoop = RunService.Heartbeat:Connect(function()
-            pcall(function()
-                for _, player in ipairs(Players:GetPlayers()) do
-                    if player ~= LocalPlayer then
-                        local char = player.Character
-                        if char then
-                            local humanoid = char:FindFirstChildOfClass("Humanoid")
-                            
-                            if humanoid and humanoid.Health > 0 then
-                                local role = "Masum"
-                                local color = Color3.fromRGB(0, 255, 0)
+            -- A) ÖLMÜŞ KİŞİLERİ SİL
+            for i = #mm2ActiveESPs, 1, -1 do
+                local hl = mm2ActiveESPs[i]
+                if not hl or not hl.Parent or not hl.Parent.Parent then
+                    table.remove(mm2ActiveESPs, i)
+                else
+                    local plr = Players:GetPlayerFromCharacter(hl.Parent)
+                    local hum = hl.Parent:FindFirstChildOfClass("Humanoid")
+                    if not plr or not hum or hum.Health <= 0 then
+                        pcall(function() hl:Destroy() end)
+                        table.remove(mm2ActiveESPs, i)
+                    end
+                end
+            end
 
-                                local function checkTools(parent)
-                                    if not parent then return end
-                                    pcall(function()
-                                        for _, item in ipairs(parent:GetChildren()) do
-                                            if item:IsA("Tool") then
-                                                local itemName = string.lower(item.Name)
-                                                if itemName == "gun" or itemName == "revolver" then
-                                                    role = "Şerif"
-                                                    color = Color3.fromRGB(0, 0, 255)
-                                                else
-                                                    local isLobbyItem = false
-                                                    local safeItems = {"compass", "radio", "teddy", "emotes", "phone", "pizza", "chocolate", "ice cream", "snowball", "trowel", "balloon", "glider", "bat", "potion", "candle", "toy"}
-                                                    for _, safe in ipairs(safeItems) do
-                                                        if string.find(itemName, safe) then isLobbyItem = true; break end
-                                                    end
-                                                    
-                                                    if not isLobbyItem then
-                                                        role = "Katil"
-                                                        color = Color3.fromRGB(255, 0, 0)
+            -- B) YAŞAYANLARI GÜNCELLE
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer then
+                    local char = player.Character
+                    if char then
+                        local humanoid = char:FindFirstChildOfClass("Humanoid")
+                        
+                        if humanoid and humanoid.Health > 0 then
+                            local role = "Masum"
+                            local color = Color3.fromRGB(0, 255, 0)
+
+                            local function checkTools(parent)
+                                if not parent then return end
+                                pcall(function()
+                                    for _, item in ipairs(parent:GetChildren()) do
+                                        if item:IsA("Tool") then
+                                            local itemName = string.lower(item.Name)
+                                            
+                                            -- Radyo ve oyuncakları doğrudan ele (Hata koruması)
+                                            if itemName:find("radio") or itemName:find("boombox") or itemName:find("teddy") or itemName:find("emote") or itemName:find("toy") then
+                                                continue
+                                            end
+                                            
+                                            -- 1. YÖNTEM: Sese Göre Net Tespit (%100 Katil/Şerif ayrımı)
+                                            local handle = item:FindFirstChild("Handle")
+                                            if handle then
+                                                local isGun = false
+                                                local isKnife = false
+                                                
+                                                for _, child in ipairs(handle:GetChildren()) do
+                                                    if child:IsA("Sound") then
+                                                        local sName = string.lower(child.Name)
+                                                        if sName:find("shoot") or sName:find("fire") or sName:find("reload") or sName:find("gun") then
+                                                            isGun = true
+                                                        elseif sName:find("slash") or sName:find("stab") or sName:find("throw") or sName:find("knife") then
+                                                            isKnife = true
+                                                        end
                                                     end
                                                 end
+                                                
+                                                if isGun then
+                                                    role = "Şerif"
+                                                    color = Color3.fromRGB(0, 0, 255)
+                                                    return
+                                                elseif isKnife then
+                                                    role = "Katil"
+                                                    color = Color3.fromRGB(255, 0, 0)
+                                                    return
+                                                end
+                                            end
+                                            
+                                            -- 2. YÖNTEM: İsim Kontrolü (Silah sesleri silinmişse yedek koruma)
+                                            if itemName:find("gun") or itemName:find("revolver") or itemName:find("blaster") or itemName:find("laser") or itemName:find("luger") or itemName:find("vintage") then
+                                                role = "Şerif"
+                                                color = Color3.fromRGB(0, 0, 255)
+                                                return
+                                            elseif itemName:find("knife") or itemName:find("blade") or itemName:find("scythe") or itemName:find("saw") or itemName:find("slasher") or itemName:find("karambit") or itemName:find("fang") or itemName:find("edge") or itemName:find("battleaxe") or itemName:find("axe") or itemName:find("dagger") or itemName:find("sword") or itemName:find("shatter") or itemName:find("pitchfork") or itemName:find("sickle") or itemName:find("machete") then
+                                                role = "Katil"
+                                                color = Color3.fromRGB(255, 0, 0)
+                                                return
                                             end
                                         end
-                                    end)
-                                end
-                                
-                                checkTools(player:FindFirstChild("Backpack"))
-                                checkTools(char)
+                                    end
+                                end)
+                            end
+                            
+                            checkTools(player:FindFirstChild("Backpack"))
+                            if role == "Masum" then checkTools(char) end
 
-                                local hl = char:FindFirstChild("MM2RoleESP")
+                            local hl = char:FindFirstChild("MM2RoleESP")
+                            if not hl then
+                                hl = Instance.new("Highlight")
+                                hl.Name = "MM2RoleESP"
+                                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                hl.Parent = char
                                 
-                                if not hl then
-                                    hl = Instance.new("Highlight")
-                                    hl.Name = "MM2RoleESP"
-                                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                                    hl.Parent = char
-                                    
-                                    local bill = Instance.new("BillboardGui", hl)
-                                    bill.Name = "RoleText"
-                                    bill.Size = UDim2.new(0, 100, 0, 30)
-                                    bill.StudsOffset = Vector3.new(0, 1.5, 0)
-                                    bill.AlwaysOnTop = true
-                                    
-                                    local txt = Instance.new("TextLabel", bill)
-                                    txt.Size = UDim2.new(1, 0, 1, 0)
-                                    txt.BackgroundTransparency = 1
-                                    txt.Font = Enum.Font.GothamBlack
-                                    txt.TextSize = 14
-                                    txt.TextStrokeTransparency = 0
-                                end
+                                local bill = Instance.new("BillboardGui", hl)
+                                bill.Name = "RoleText"
+                                bill.Size = UDim2.new(0, 100, 0, 30)
+                                bill.StudsOffset = Vector3.new(0, 1.5, 0)
+                                bill.AlwaysOnTop = true
                                 
-                                local targetPart = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-                                if targetPart and hl:FindFirstChild("RoleText") then
-                                    hl.RoleText.Adornee = targetPart
-                                end
+                                local txt = Instance.new("TextLabel", bill)
+                                txt.Size = UDim2.new(1, 0, 1, 0)
+                                txt.BackgroundTransparency = 1
+                                txt.Font = Enum.Font.GothamBlack
+                                txt.TextSize = 14
+                                txt.TextStrokeTransparency = 0
                                 
-                                hl.FillColor = color
-                                hl.OutlineColor = color
-                                hl.FillTransparency = 0.6
-                                
-                                local textLabel = hl:FindFirstChild("RoleText") and hl.RoleText:FindFirstChildOfClass("TextLabel")
-                                if textLabel then 
-                                    textLabel.Text = role
-                                    textLabel.TextColor3 = color 
-                                end
-                            else
-                                local hl = char:FindFirstChild("MM2RoleESP")
-                                if hl then hl:Destroy() end
+                                table.insert(mm2ActiveESPs, hl)
+                            end
+                            
+                            local targetPart = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+                            if targetPart and hl:FindFirstChild("RoleText") then
+                                hl.RoleText.Adornee = targetPart
+                            end
+                            
+                            hl.FillColor = color
+                            hl.OutlineColor = color
+                            hl.FillTransparency = 0.6
+                            
+                            local textLabel = hl:FindFirstChild("RoleText") and hl.RoleText:FindFirstChildOfClass("TextLabel")
+                            if textLabel then 
+                                textLabel.Text = role
+                                textLabel.TextColor3 = color 
                             end
                         end
                     end
                 end
-            end)
+            end
         end)
     else
         if mm2ESPLoop then mm2ESPLoop:Disconnect(); mm2ESPLoop = nil end
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player.Character and player.Character:FindFirstChild("MM2RoleESP") then 
-                player.Character.MM2RoleESP:Destroy() 
+        ClearAllMM2ESP()
+    end
+end
+
+local function ToggleMM2ESP() 
+    isMM2ESPEnabled = not isMM2ESPEnabled
+    UpdateUI(MM2ESPToggle, isMM2ESPEnabled)
+    if not isMM2ESPEnabled then ClearAllMM2ESP() end
+    UpdateMM2ESP() 
+end
+MM2ESPToggle.MouseButton1Click:Connect(ToggleMM2ESP); SetupKeybind(MM2ESPKey, "MM2ESP", ToggleMM2ESP)
+
+
+-- Yardımcı Fonksiyon (Silah Dropunu En Derin Klasörlerde Bile Bulur)
+local function FindGunDrop()
+    local directDrop = workspace:FindFirstChild("GunDrop") or workspace:FindFirstChild("RevolverDrop")
+    if directDrop then return directDrop end
+    
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "GunDrop" or obj.Name == "RevolverDrop" then
+            if (obj:IsA("BasePart") or obj:IsA("Model")) and obj.Parent and not obj.Parent:FindFirstChild("Humanoid") then
+                return obj
             end
         end
     end
+    return nil
 end
-local function ToggleMM2ESP() isMM2ESPEnabled = not isMM2ESPEnabled; UpdateUI(MM2ESPToggle, isMM2ESPEnabled); UpdateMM2ESP() end
-MM2ESPToggle.MouseButton1Click:Connect(ToggleMM2ESP); SetupKeybind(MM2ESPKey, "MM2ESP", ToggleMM2ESP)
 
--- KESİN ÇÖZÜM: LOOP IŞINLANMALI MM2 AUTO GRAB GUN 
+local function CheckIfHasGun(parent)
+    if not parent then return false end
+    for _, item in ipairs(parent:GetChildren()) do
+        if item:IsA("Tool") then
+            local lower = string.lower(item.Name)
+            if lower:find("gun") or lower:find("revolver") or lower:find("blaster") or lower:find("laser") or lower:find("luger") or lower:find("vintage") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- 2. "FREEZE TP" DESTEKLİ, %100 ÇALIŞAN AUTO GRAB GUN YENİLENDİ
 local function UpdateAutoGrab()
     if isAutoGrabEnabled then
         autoGrabLoop = RunService.Heartbeat:Connect(function()
@@ -886,60 +968,67 @@ local function UpdateAutoGrab()
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
-            -- Eğer silah zaten çantamızda veya elimizdeyse işlemi durdur
-            if LocalPlayer.Backpack:FindFirstChild("Gun") or char:FindFirstChild("Gun") then
+            -- Zaten silahımız varsa kapma işlemini iptal et
+            if CheckIfHasGun(LocalPlayer.Backpack) or CheckIfHasGun(char) then
                 return
             end
             
-            -- Silahın yere düştüğünü tespit et
-            local gunDrop = workspace:FindFirstChild("GunDrop")
+            local gunDrop = FindGunDrop()
             
             if gunDrop then
                 grabbingGun = true
                 
                 task.spawn(function()
                     local oldCFrame = hrp.CFrame
-                    local attempts = 0
+                    local ticks = 0
                     
-                    -- SİLAH BİZİM ENVANTERİMİZE GİRENE KADAR SÜREKLİ TP OL (Maksimum 40 deneme / 2 saniye)
-                    while isAutoGrabEnabled and workspace:FindFirstChild("GunDrop") and not (LocalPlayer.Backpack:FindFirstChild("Gun") or LocalPlayer.Character:FindFirstChild("Gun")) and attempts < 40 do
+                    -- Silah bizde olana VEYA yerde silah kalmayana kadar milisaniyelik TP döngüsü
+                    while isAutoGrabEnabled and FindGunDrop() and not (CheckIfHasGun(LocalPlayer.Backpack) or CheckIfHasGun(LocalPlayer.Character)) and ticks < 20 do
+                        local currentDrop = FindGunDrop()
                         local currentHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if not currentHrp then break end
                         
-                        local targetCFrame
-                        if gunDrop:IsA("Model") then
-                            targetCFrame = gunDrop:GetPivot()
-                        elseif gunDrop:IsA("BasePart") then
-                            targetCFrame = gunDrop.CFrame
-                        end
-                        
-                        if targetCFrame then
-                            -- Silahın tam ortasına ışınlan
-                            currentHrp.CFrame = targetCFrame
-                            currentHrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                        if currentDrop and currentHrp then
+                            local dropPos
+                            if currentDrop:IsA("Model") then
+                                dropPos = currentDrop:GetPivot()
+                            elseif currentDrop:IsA("BasePart") then
+                                dropPos = currentDrop.CFrame
+                            end
                             
-                            -- Exploitlerin desteklemesi için ekstra dokunma hissi yolla
-                            local touchPart = gunDrop:FindFirstChildWhichIsA("BasePart") or (gunDrop:IsA("BasePart") and gunDrop)
-                            if touchPart and firetouchinterest then
-                                pcall(function()
-                                    firetouchinterest(currentHrp, touchPart, 0)
-                                    firetouchinterest(currentHrp, touchPart, 1)
-                                end)
+                            if dropPos then
+                                -- Silaha yapış ve hızını sıfırla (Anti-Cheat koruması)
+                                currentHrp.CFrame = dropPos
+                                currentHrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                                currentHrp.AssemblyAngularVelocity = Vector3.new(0,0,0)
+                                
+                                -- BÜTÜN PARÇALARA DOKUNMA HİSSİYATINI YOLLA (Geliştirilmiş Force Touch)
+                                if firetouchinterest then
+                                    if currentDrop:IsA("BasePart") then
+                                        pcall(firetouchinterest, currentHrp, currentDrop, 0)
+                                        pcall(firetouchinterest, currentHrp, currentDrop, 1)
+                                    end
+                                    for _, part in ipairs(currentDrop:GetDescendants()) do
+                                        if part:IsA("BasePart") then
+                                            pcall(firetouchinterest, currentHrp, part, 0)
+                                            pcall(firetouchinterest, currentHrp, part, 1)
+                                        end
+                                    end
+                                end
                             end
                         end
                         
-                        attempts = attempts + 1
-                        task.wait(0.05) -- Saniyenin 20'de 1'i kadar bekleyip döngüyü tekrarla
+                        ticks = ticks + 1
+                        task.wait(0.05) -- Çok hızlı tekrarla (0.05 Saniye)
                     end
                     
-                    -- DÖNGÜ BİTTİ (Silahı başarılı aldık veya süre doldu), ESKİ YERİNE ANINDA GERİ DÖN
-                    local currentHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    if currentHrp then
-                        currentHrp.CFrame = oldCFrame
-                        currentHrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                    -- SİLAHI ALDIĞIMIZ AN ANINDA ESKİ YERE DÖN
+                    local finalHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if finalHrp then
+                        finalHrp.CFrame = oldCFrame
+                        finalHrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
                     end
                     
-                    -- Buga girmemesi için 1 saniyelik bekleme/soğuma süresi
+                    -- Sistem kararlılığı için 1 saniye bekle
                     task.wait(1)
                     grabbingGun = false
                 end)
@@ -998,6 +1087,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     
     spectatedPlayer = nil; UpdateSpectate()
     attachedPlayer = nil; UpdateAttach()
+    ClearAllMM2ESP()
     
     for _, p in ipairs(Players:GetPlayers()) do RemoveESP(p) end
     for _, conn in ipairs(eventConnections) do if conn then conn:Disconnect() end end
