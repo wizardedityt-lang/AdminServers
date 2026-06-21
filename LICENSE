@@ -13,12 +13,12 @@ local NebulaConfig = {
     Sliders = {
         FlySpeed = 50,
         WalkSpeed = 50,
-        SpinSpeed = 1 -- Spinbot varsayılan başlangıç hızı 1 yapıldı
+        SpinSpeed = 1
     },
     Keybinds = {
         Fly = "F", WalkSpeed = "Z", Spin = "C",
         Jump = "None", Noclip = "None", GlobalESP = "E",
-        AutoTP = "None", MM2ESP = "None", AutoGrab = "None"
+        AutoTP = "None", MM2ESP = "None", AutoGrab = "None", AntiFling = "None"
     }
 }
 
@@ -45,7 +45,7 @@ end
 LoadConfig()
 
 -- // Değişkenler //
-local maxFlySpeed, maxWalkSpeed, maxSpinSpeed = 700, 700, 7000 -- Spinbot max hızı 7k yapıldı
+local maxFlySpeed, maxWalkSpeed, maxSpinSpeed = 700, 700, 7000 
 local isFlying = false
 local isSpeedEnabled = false
 local isSpinning = false
@@ -66,9 +66,10 @@ local lastTPTime = 0
 -- MM2 Değişkenleri
 local isMM2ESPEnabled = false
 local isAutoGrabEnabled = false
+local isAntiFlingEnabled = false
 local grabbingGun = false
 
-local flyLoop, speedLoop, infJumpConnection, spinLoop, noclipLoop, mm2ESPLoop, autoGrabLoop
+local flyLoop, speedLoop, infJumpConnection, spinLoop, noclipLoop, mm2ESPLoop, autoGrabLoop, antiFlingLoop
 local eventConnections = {} 
 local activeESPs = {} 
 
@@ -392,7 +393,7 @@ local function SetupSlider(SliderObj, configKey, maxValue, callback)
     end)
 end
 
--- // GÜNCELLENMİŞ KAYITLI KEYBIND SİSTEMİ (nil Hatası Düzeltildi) //
+-- // GÜNCELLENMİŞ KEYBIND SİSTEMİ //
 local function SetupKeybind(KeyBtn, configKey, actionFunc)
     local currentKeyName = NebulaConfig.Keybinds[configKey]
     local currentKey = nil
@@ -424,13 +425,14 @@ local function SetupKeybind(KeyBtn, configKey, actionFunc)
                 KeyBtn.TextColor3 = Color3.fromRGB(165, 94, 234)
                 SaveConfig(); isBinding = false
             end
-        elseif currentKey and input.KeyCode == currentKey and not gameProcessed then
-            actionFunc() 
+        elseif currentKey and input.KeyCode == currentKey then
+            if UserInputService:GetFocusedTextBox() == nil then
+                actionFunc() 
+            end
         end
     end)
     table.insert(eventConnections, conn)
 end
-
 
 -- ==========================================
 -- // GENEL SEKME MODÜLLERİ VE FONKSİYONLARI //
@@ -630,12 +632,10 @@ end)
 local function UpdateAutoTP()
     if isAutoTPEnabled then
         autoTPLoopConn = RunService.Stepped:Connect(function()
-            -- 0.9 saniyede bir TP atar. Bu süre içinde adam serbestçe hareket edebilir.
             if tick() - lastTPTime >= 0.9 then
                 lastTPTime = tick()
                 if savedCFrame and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     LocalPlayer.Character.HumanoidRootPart.CFrame = savedCFrame
-                    -- İvmeyi sıfırla ki havada kayma olmasın
                     LocalPlayer.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0,0,0)
                 end
             end
@@ -767,79 +767,222 @@ for _, p in ipairs(Players:GetPlayers()) do p.CharacterAdded:Connect(function() 
 RefreshPlayerList()
 
 -- ==========================================
--- // MM2 ÖZEL SEKME FONKSİYONLARI //
+-- // MM2 ÖZEL SEKME FONKSİYONLARI GÜNCELLENDİ //
 -- ==========================================
 local MM2ESPMod, MM2ESPToggle, _, MM2ESPKey = CreateModule("🔪 MM2 Rol ESP (Şerif/Katil)", false, MM2ScrollFrame)
 local AutoGrabMod, AutoGrabToggle, _, AutoGrabKey = CreateModule("🔫 Auto Grab Gun (Silah Kap)", false, MM2ScrollFrame)
+local AntiFlingMod, AntiFlingToggle, _, AntiFlingKey = CreateModule("🛡️ Anti Fling (Çarpışma Kapat)", false, MM2ScrollFrame)
 
+-- GÜNCELLENMİŞ MM2 ESP 
 local function UpdateMM2ESP()
     if isMM2ESPEnabled then
-        mm2ESPLoop = RunService.RenderStepped:Connect(function()
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character then
-                    local role = "Masum"
-                    local color = Color3.fromRGB(0, 255, 0)
+        mm2ESPLoop = RunService.Heartbeat:Connect(function()
+            pcall(function()
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer then
+                        local char = player.Character
+                        if char then
+                            local humanoid = char:FindFirstChildOfClass("Humanoid")
+                            
+                            if humanoid and humanoid.Health > 0 then
+                                local role = "Masum"
+                                local color = Color3.fromRGB(0, 255, 0)
 
-                    local function checkTools(parent)
-                        if not parent then return end
-                        for _, item in ipairs(parent:GetChildren()) do
-                            if item:IsA("Tool") then
-                                if item.Name == "Gun" then
-                                    role = "Şerif"; color = Color3.fromRGB(0, 0, 255)
-                                elseif item.Name ~= "Compass" and item.Name ~= "Radio" and item.Name ~= "Teddy" and item.Name ~= "Gun" then
-                                    role = "Katil"; color = Color3.fromRGB(255, 0, 0)
+                                local function checkTools(parent)
+                                    if not parent then return end
+                                    pcall(function()
+                                        for _, item in ipairs(parent:GetChildren()) do
+                                            if item:IsA("Tool") then
+                                                local itemName = string.lower(item.Name)
+                                                if itemName == "gun" or itemName == "revolver" then
+                                                    role = "Şerif"
+                                                    color = Color3.fromRGB(0, 0, 255)
+                                                else
+                                                    local isLobbyItem = false
+                                                    local safeItems = {"compass", "radio", "teddy", "emotes", "phone", "pizza", "chocolate", "ice cream", "snowball", "trowel", "balloon", "glider", "bat", "potion", "candle", "toy"}
+                                                    for _, safe in ipairs(safeItems) do
+                                                        if string.find(itemName, safe) then isLobbyItem = true; break end
+                                                    end
+                                                    
+                                                    if not isLobbyItem then
+                                                        role = "Katil"
+                                                        color = Color3.fromRGB(255, 0, 0)
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end)
                                 end
+                                
+                                checkTools(player:FindFirstChild("Backpack"))
+                                checkTools(char)
+
+                                local hl = char:FindFirstChild("MM2RoleESP")
+                                
+                                if not hl then
+                                    hl = Instance.new("Highlight")
+                                    hl.Name = "MM2RoleESP"
+                                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                    hl.Parent = char
+                                    
+                                    local bill = Instance.new("BillboardGui", hl)
+                                    bill.Name = "RoleText"
+                                    bill.Size = UDim2.new(0, 100, 0, 30)
+                                    bill.StudsOffset = Vector3.new(0, 1.5, 0)
+                                    bill.AlwaysOnTop = true
+                                    
+                                    local txt = Instance.new("TextLabel", bill)
+                                    txt.Size = UDim2.new(1, 0, 1, 0)
+                                    txt.BackgroundTransparency = 1
+                                    txt.Font = Enum.Font.GothamBlack
+                                    txt.TextSize = 14
+                                    txt.TextStrokeTransparency = 0
+                                end
+                                
+                                local targetPart = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+                                if targetPart and hl:FindFirstChild("RoleText") then
+                                    hl.RoleText.Adornee = targetPart
+                                end
+                                
+                                hl.FillColor = color
+                                hl.OutlineColor = color
+                                hl.FillTransparency = 0.6
+                                
+                                local textLabel = hl:FindFirstChild("RoleText") and hl.RoleText:FindFirstChildOfClass("TextLabel")
+                                if textLabel then 
+                                    textLabel.Text = role
+                                    textLabel.TextColor3 = color 
+                                end
+                            else
+                                local hl = char:FindFirstChild("MM2RoleESP")
+                                if hl then hl:Destroy() end
                             end
                         end
                     end
-                    checkTools(player.Backpack); checkTools(player.Character)
-
-                    local hl = player.Character:FindFirstChild("MM2RoleESP")
-                    if not hl then
-                        hl = Instance.new("Highlight"); hl.Name = "MM2RoleESP"; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop; hl.Parent = player.Character
-                        local bill = Instance.new("BillboardGui", hl); bill.Name = "RoleText"; bill.Size = UDim2.new(0, 100, 0, 30); bill.StudsOffset = Vector3.new(0, 3.5, 0); bill.AlwaysOnTop = true
-                        local txt = Instance.new("TextLabel", bill); txt.Size = UDim2.new(1, 0, 1, 0); txt.BackgroundTransparency = 1; txt.Font = Enum.Font.GothamBlack; txt.TextSize = 16; txt.TextStrokeTransparency = 0
-                    end
-                    hl.FillColor = color; hl.OutlineColor = color; hl.FillTransparency = 0.6
-                    local textLabel = hl.RoleText:FindFirstChildOfClass("TextLabel")
-                    if textLabel then textLabel.Text = role; textLabel.TextColor3 = color end
                 end
-            end
+            end)
         end)
     else
-        if mm2ESPLoop then mm2ESPLoop:Disconnect() end
+        if mm2ESPLoop then mm2ESPLoop:Disconnect(); mm2ESPLoop = nil end
         for _, player in ipairs(Players:GetPlayers()) do
-            if player.Character and player.Character:FindFirstChild("MM2RoleESP") then player.Character.MM2RoleESP:Destroy() end
+            if player.Character and player.Character:FindFirstChild("MM2RoleESP") then 
+                player.Character.MM2RoleESP:Destroy() 
+            end
         end
     end
 end
 local function ToggleMM2ESP() isMM2ESPEnabled = not isMM2ESPEnabled; UpdateUI(MM2ESPToggle, isMM2ESPEnabled); UpdateMM2ESP() end
 MM2ESPToggle.MouseButton1Click:Connect(ToggleMM2ESP); SetupKeybind(MM2ESPKey, "MM2ESP", ToggleMM2ESP)
 
+-- KESİN ÇÖZÜM: LOOP IŞINLANMALI MM2 AUTO GRAB GUN 
 local function UpdateAutoGrab()
     if isAutoGrabEnabled then
-        autoGrabLoop = RunService.Stepped:Connect(function()
+        autoGrabLoop = RunService.Heartbeat:Connect(function()
+            if not isAutoGrabEnabled or grabbingGun then return end
+            
+            local char = LocalPlayer.Character
+            if not char then return end
+            
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            -- Eğer silah zaten çantamızda veya elimizdeyse işlemi durdur
+            if LocalPlayer.Backpack:FindFirstChild("Gun") or char:FindFirstChild("Gun") then
+                return
+            end
+            
+            -- Silahın yere düştüğünü tespit et
             local gunDrop = workspace:FindFirstChild("GunDrop")
-            if gunDrop and not grabbingGun and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            
+            if gunDrop then
                 grabbingGun = true
-                local hrp = LocalPlayer.Character.HumanoidRootPart
-                local oldPos = hrp.CFrame
-                hrp.CFrame = gunDrop.CFrame
+                
                 task.spawn(function()
-                    task.wait(0.3)
-                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then hrp.CFrame = oldPos end
+                    local oldCFrame = hrp.CFrame
+                    local attempts = 0
+                    
+                    -- SİLAH BİZİM ENVANTERİMİZE GİRENE KADAR SÜREKLİ TP OL (Maksimum 40 deneme / 2 saniye)
+                    while isAutoGrabEnabled and workspace:FindFirstChild("GunDrop") and not (LocalPlayer.Backpack:FindFirstChild("Gun") or LocalPlayer.Character:FindFirstChild("Gun")) and attempts < 40 do
+                        local currentHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if not currentHrp then break end
+                        
+                        local targetCFrame
+                        if gunDrop:IsA("Model") then
+                            targetCFrame = gunDrop:GetPivot()
+                        elseif gunDrop:IsA("BasePart") then
+                            targetCFrame = gunDrop.CFrame
+                        end
+                        
+                        if targetCFrame then
+                            -- Silahın tam ortasına ışınlan
+                            currentHrp.CFrame = targetCFrame
+                            currentHrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                            
+                            -- Exploitlerin desteklemesi için ekstra dokunma hissi yolla
+                            local touchPart = gunDrop:FindFirstChildWhichIsA("BasePart") or (gunDrop:IsA("BasePart") and gunDrop)
+                            if touchPart and firetouchinterest then
+                                pcall(function()
+                                    firetouchinterest(currentHrp, touchPart, 0)
+                                    firetouchinterest(currentHrp, touchPart, 1)
+                                end)
+                            end
+                        end
+                        
+                        attempts = attempts + 1
+                        task.wait(0.05) -- Saniyenin 20'de 1'i kadar bekleyip döngüyü tekrarla
+                    end
+                    
+                    -- DÖNGÜ BİTTİ (Silahı başarılı aldık veya süre doldu), ESKİ YERİNE ANINDA GERİ DÖN
+                    local currentHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if currentHrp then
+                        currentHrp.CFrame = oldCFrame
+                        currentHrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                    end
+                    
+                    -- Buga girmemesi için 1 saniyelik bekleme/soğuma süresi
                     task.wait(1)
                     grabbingGun = false
                 end)
             end
         end)
     else
-        if autoGrabLoop then autoGrabLoop:Disconnect() end
+        if autoGrabLoop then autoGrabLoop:Disconnect(); autoGrabLoop = nil end
+        grabbingGun = false
     end
 end
 local function ToggleAutoGrab() isAutoGrabEnabled = not isAutoGrabEnabled; UpdateUI(AutoGrabToggle, isAutoGrabEnabled); UpdateAutoGrab() end
 AutoGrabToggle.MouseButton1Click:Connect(ToggleAutoGrab); SetupKeybind(AutoGrabKey, "AutoGrab", ToggleAutoGrab)
 
+-- YENİ ANTI FLING SİSTEMİ (Çarpışmaları Dondurur ve Flingcileri Kilitler)
+local function UpdateAntiFling()
+    if isAntiFlingEnabled then
+        antiFlingLoop = RunService.Stepped:Connect(function()
+            pcall(function()
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        for _, part in ipairs(player.Character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                -- Bütün oyuncuların bize fiziksel çarpmasını kapat
+                                part.CanCollide = false
+                                
+                                -- Eğer başka biri fling açıp saniyede devasa bir hıza ulaşıyorsa
+                                -- Bize çarpıp fırlatmaması için o oyuncunun hızını bizim ekranımızda 0'la
+                                if part.AssemblyLinearVelocity.Magnitude > 200 or part.AssemblyAngularVelocity.Magnitude > 200 then
+                                    part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                                    part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end)
+    else
+        if antiFlingLoop then antiFlingLoop:Disconnect(); antiFlingLoop = nil end
+    end
+end
+local function ToggleAntiFling() isAntiFlingEnabled = not isAntiFlingEnabled; UpdateUI(AntiFlingToggle, isAntiFlingEnabled); UpdateAntiFling() end
+AntiFlingToggle.MouseButton1Click:Connect(ToggleAntiFling); SetupKeybind(AntiFlingKey, "AntiFling", ToggleAntiFling)
 
 -- // KAPATMA BÖLÜMÜ //
 CloseBtn.MouseButton1Click:Connect(function()
@@ -851,6 +994,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     isMM2ESPEnabled = false; UpdateMM2ESP()
     isAutoGrabEnabled = false; UpdateAutoGrab()
     isAutoTPEnabled = false; UpdateAutoTP()
+    isAntiFlingEnabled = false; UpdateAntiFling()
     
     spectatedPlayer = nil; UpdateSpectate()
     attachedPlayer = nil; UpdateAttach()
