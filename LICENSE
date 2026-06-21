@@ -13,12 +13,12 @@ local NebulaConfig = {
     Sliders = {
         FlySpeed = 50,
         WalkSpeed = 50,
-        SpinSpeed = 100
+        SpinSpeed = 1 -- Spinbot varsayılan başlangıç hızı 1 yapıldı
     },
     Keybinds = {
         Fly = "F", WalkSpeed = "Z", Spin = "C",
-        Jump = nil, Noclip = nil, GlobalESP = "E",
-        AutoTP = nil, MM2ESP = nil, AutoGrab = nil
+        Jump = "None", Noclip = "None", GlobalESP = "E",
+        AutoTP = "None", MM2ESP = "None", AutoGrab = "None"
     }
 }
 
@@ -45,7 +45,7 @@ end
 LoadConfig()
 
 -- // Değişkenler //
-local maxFlySpeed, maxWalkSpeed, maxSpinSpeed = 700, 700, 3000
+local maxFlySpeed, maxWalkSpeed, maxSpinSpeed = 700, 700, 7000 -- Spinbot max hızı 7k yapıldı
 local isFlying = false
 local isSpeedEnabled = false
 local isSpinning = false
@@ -392,19 +392,21 @@ local function SetupSlider(SliderObj, configKey, maxValue, callback)
     end)
 end
 
--- // KAYITLI KEYBIND SİSTEMİ //
+-- // GÜNCELLENMİŞ KAYITLI KEYBIND SİSTEMİ (nil Hatası Düzeltildi) //
 local function SetupKeybind(KeyBtn, configKey, actionFunc)
     local currentKeyName = NebulaConfig.Keybinds[configKey]
     local currentKey = nil
     
-    if currentKeyName then pcall(function() currentKey = Enum.KeyCode[currentKeyName] end) end
+    if currentKeyName and currentKeyName ~= "None" then 
+        pcall(function() currentKey = Enum.KeyCode[currentKeyName] end) 
+    end
     
     local isBinding = false
-    if currentKey then KeyBtn.Text = "[ "..currentKey.Name.." ]" end
+    if currentKey then KeyBtn.Text = "[ "..currentKey.Name.." ]" else KeyBtn.Text = "[ + ]" end
 
     KeyBtn.MouseButton1Click:Connect(function()
         if isBinding then
-            isBinding = false; currentKey = nil; NebulaConfig.Keybinds[configKey] = nil
+            isBinding = false; currentKey = nil; NebulaConfig.Keybinds[configKey] = "None"
             SaveConfig(); KeyBtn.Text = "[ + ]"; KeyBtn.TextColor3 = Color3.fromRGB(165, 94, 234)
         else
             isBinding = true; KeyBtn.Text = "..."; KeyBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
@@ -415,7 +417,7 @@ local function SetupKeybind(KeyBtn, configKey, actionFunc)
         if isBinding then
             if input.UserInputType == Enum.UserInputType.Keyboard then
                 if input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Escape then
-                    currentKey = nil; NebulaConfig.Keybinds[configKey] = nil; KeyBtn.Text = "[ + ]"
+                    currentKey = nil; NebulaConfig.Keybinds[configKey] = "None"; KeyBtn.Text = "[ + ]"
                 else
                     currentKey = input.KeyCode; NebulaConfig.Keybinds[configKey] = currentKey.Name; KeyBtn.Text = "[ "..currentKey.Name.." ]"
                 end
@@ -472,6 +474,7 @@ end
 local function ToggleGlobalESP() isGlobalESPEnabled = not isGlobalESPEnabled; UpdateUI(GlobalESPToggle, isGlobalESPEnabled); UpdateGlobalESP() end
 GlobalESPToggle.MouseButton1Click:Connect(ToggleGlobalESP); SetupKeybind(GlobalESPKey, "GlobalESP", ToggleGlobalESP)
 
+-- Orijinal Fly Kodu
 local function UpdateFly()
     local char = LocalPlayer.Character; if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     local HRP = char.HumanoidRootPart; local Humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -505,6 +508,7 @@ end
 local function ToggleFly() isFlying = not isFlying; UpdateUI(FlyToggle, isFlying); UpdateFly() end
 FlyToggle.MouseButton1Click:Connect(ToggleFly); SetupKeybind(FlyKey, "Fly", ToggleFly)
 
+-- Orijinal Speed Kodu
 local function UpdateSpeed()
     if isSpeedEnabled then
         speedLoop = RunService.RenderStepped:Connect(function()
