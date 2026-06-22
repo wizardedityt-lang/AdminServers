@@ -770,7 +770,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 3 SANİYE İÇİNE GİRİP FLİNGLEYEN & 3 SANİYE KİLİTLENEN SİSTEM
+        -- 🌀 DONMA VE GECİKME SORUNU ÇÖZÜLMÜŞ, HAREKETLİ HEDEFE ANINDA VURAN FLING
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -796,38 +796,29 @@ local function RefreshPlayerList()
                     
                     if hum then hum.PlatformStand = true end
                     
-                    -- Kendimizi hedefin içine hapsedecek ve döndürecek objeler
-                    local bav = Instance.new("BodyAngularVelocity")
-                    bav.AngularVelocity = Vector3.new(99999, 99999, 99999) -- Yüksek dönüş hızı (Fling için bu şarttır)
-                    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                    bav.P = math.huge
-                    bav.Parent = myHRP
-                    
-                    -- Fling süresi: 3 Saniye
                     local flingDuration = 3.0 
                     local startTime = tick()
                     
                     local conn
-                    conn = RunService.Heartbeat:Connect(function()
+                    -- RunService.Stepped fiziksel hesaplamalardan tam önce çalıştığı için Fling'in en güçlü halidir.
+                    conn = RunService.Stepped:Connect(function()
                         if tick() - startTime > flingDuration then
                             conn:Disconnect()
                             return
                         end
                         
-                        if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                            -- Lineer hız (Velocity) vermek harita dışına uçurur. 
-                            -- Onun yerine tam içine girip (CFrame) sadece dönme hızı (RotVelocity) veriyoruz.
+                        -- Adamı anında takip et ve zıplıyorsa hareket ediyorsa Hızını (Velocity) kopyala
+                        if tChar and tChar:FindFirstChild("HumanoidRootPart") and myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myHRP.CFrame = tHRP.CFrame
-                            myHRP.Velocity = Vector3.new(0, 0, 0)
-                            myHRP.RotVelocity = Vector3.new(99999, 99999, 99999)
+                            myHRP.Velocity = tHRP.Velocity -- Zıplamasına/Koşmasına kusursuz ayak uydurur
+                            myHRP.RotVelocity = Vector3.new(50000, 50000, 50000) -- Sıfır gecikmeyle anında tam güç dönüş
                         else
                             conn:Disconnect()
                         end
                     end)
                     
-                    task.wait(flingDuration + 0.1)
+                    task.wait(flingDuration)
                     if conn then conn:Disconnect() end
-                    if bav then bav:Destroy() end
                     
                     if hum then 
                         hum.PlatformStand = false
@@ -849,7 +840,7 @@ local function RefreshPlayerList()
                             return
                         end
                         
-                        -- 3 saniye boyunca başlangıç pozisyonunda kilitli kal
+                        -- 3 saniye boyunca orijinal yerinde sabit kilitli tut
                         if myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myChar.HumanoidRootPart.CFrame = oldCFrame
                             myChar.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
