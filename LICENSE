@@ -71,6 +71,7 @@ local isKillMurdererEnabled = false
 local grabbingGun = false
 local currentKatil = nil
 local currentSheriff = nil
+local currentFlingTarget = nil -- Hata düzeltmesi için özel fırlatma değişkeni
 
 local flyLoop, speedLoop, infJumpConnection, noclipLoop, mm2ESPLoop, autoGrabLoop, antiFlingLoop, killAllLoop, killMurdererLoop
 local eventConnections = {} 
@@ -767,7 +768,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 GELİŞTİRİLMİŞ ULTRA FLING BUTONU (2.5 SANİYE)
+        -- 🌀 KUSURSUZ (BUG'SIZ) ULTRA FLING BUTONU
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -781,6 +782,7 @@ local function RefreshPlayerList()
             
             if myChar and tChar and myChar:FindFirstChild("HumanoidRootPart") and tChar:FindFirstChild("HumanoidRootPart") then
                 isFlinging = true
+                currentFlingTarget = player -- Anti-Fling'in bu hedefin çarpışmasını kapatmasını engeller (Flingin içinden geçme bug'ını çözer)
                 FlingBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
                 
                 task.spawn(function()
@@ -791,18 +793,13 @@ local function RefreshPlayerList()
                     
                     if hum then hum.PlatformStand = true end
                     
-                    local bav = Instance.new("BodyAngularVelocity")
-                    bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
-                    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                    bav.P = math.huge
-                    bav.Parent = myHRP
+                    local spin = Instance.new("BodyAngularVelocity")
+                    spin.Name = "NebulaSpinFling"
+                    spin.AngularVelocity = Vector3.new(999999, 999999, 999999)
+                    spin.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    spin.P = math.huge
+                    spin.Parent = myHRP
                     
-                    local thrust = Instance.new("BodyThrust")
-                    thrust.Force = Vector3.new(99999, 99999, 99999)
-                    thrust.Location = myHRP.Position
-                    thrust.Parent = myHRP
-
-                    -- SÜRE 2.5 SANİYEYE İNDİRİLDİ
                     local flingDuration = 2.5
                     local startTime = tick()
                     
@@ -814,23 +811,30 @@ local function RefreshPlayerList()
                         end
                         
                         if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                            myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-2, 2)/10, math.random(-2, 2)/10, math.random(-2, 2)/10)
+                            -- Hedefin etrafında ufak bir sapmayla saniyede onlarca kez dönerek çarpar. Fizik motorunu delirtip balyoz etkisi yaratır.
+                            myHRP.CFrame = tHRP.CFrame * CFrame.Angles(0, math.rad(math.random(1, 360)), 0) * CFrame.new(0.5, 0, 0)
                             myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                             myHRP.AssemblyAngularVelocity = Vector3.new(999999, 999999, 999999)
+                        else
+                            conn:Disconnect()
                         end
                     end)
                     
                     task.wait(flingDuration + 0.1)
                     if conn then conn:Disconnect() end
-                    if bav then bav:Destroy() end
-                    if thrust then thrust:Destroy() end
+                    if spin then spin:Destroy() end
                     
-                    if hum then hum.PlatformStand = false end
+                    if hum then 
+                        hum.PlatformStand = false
+                        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    end
+                    
                     myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                     myHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                     myHRP.CFrame = oldCFrame
                     
                     isFlinging = false
+                    currentFlingTarget = nil
                     FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
                 end)
             end
@@ -938,7 +942,6 @@ end
 local lastRoleCheck = 0
 RunService.Heartbeat:Connect(function()
     if not isMM2ESPEnabled then return end
-    -- TESPİT SÜRESİ 0.5'ten 0.05'e DÜŞÜRÜLDÜ (ÇOK DAHA HIZLI)
     if tick() - lastRoleCheck >= 0.05 then
         lastRoleCheck = tick()
         local tKatil, tSheriff = nil, nil
@@ -1075,11 +1078,15 @@ local function UpdateAntiFling()
         antiFlingLoop = RunService.Stepped:Connect(function()
             pcall(function()
                 for _, player in ipairs(Players:GetPlayers()) do
-                    if player ~= LocalPlayer and player.Character then
+                    -- EĞER O OYUNCUYU ŞU AN FIRLATIYORSAK, ONUN ÇARPIŞMASINI KAPATMAZ!
+                    if player ~= LocalPlayer and player ~= currentFlingTarget and player.Character then
                         for _, part in ipairs(player.Character:GetDescendants()) do
                             if part:IsA("BasePart") then
                                 part.CanCollide = false
-                                if part.AssemblyLinearVelocity.Magnitude > 200 or part.AssemblyAngularVelocity.Magnitude > 200 then part.AssemblyLinearVelocity = Vector3.new(0, 0, 0); part.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end
+                                if part.AssemblyLinearVelocity.Magnitude > 200 or part.AssemblyAngularVelocity.Magnitude > 200 then 
+                                    part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                                    part.AssemblyAngularVelocity = Vector3.new(0, 0, 0) 
+                                end
                             end
                         end
                     end
@@ -1118,6 +1125,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     spectatedPlayer = nil; UpdateSpectate()
     attachedPlayer = nil; UpdateAttach()
     activeTplocation = nil
+    currentFlingTarget = nil
     ClearAllMM2ESP()
     
     for _, p in ipairs(Players:GetPlayers()) do RemoveESP(p) end
