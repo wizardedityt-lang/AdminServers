@@ -770,7 +770,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 DONMA SORUNU ÇÖZÜLMÜŞ GELİŞMİŞ FLING BUTONU
+        -- 🌀 3 SANİYE İÇİNE GİRİP FLİNGLEYEN & 3 SANİYE KİLİTLENEN SİSTEM
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -796,22 +796,15 @@ local function RefreshPlayerList()
                     
                     if hum then hum.PlatformStand = true end
                     
-                    -- CFrame ile spamlamak yerine BodyPosition ile mermi gibi hedefe ucalim
-                    local bpos = Instance.new("BodyPosition")
-                    bpos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    bpos.P = 100000
-                    bpos.D = 100
-                    bpos.Position = tHRP.Position
-                    bpos.Parent = myHRP
-                    
-                    -- Hiz (99999) hatasi NaN verdirip karakteri donduruyordu, 10000'e sabitlendi.
+                    -- Kendimizi hedefin içine hapsedecek ve döndürecek objeler
                     local bav = Instance.new("BodyAngularVelocity")
-                    bav.AngularVelocity = Vector3.new(10000, 10000, 10000)
+                    bav.AngularVelocity = Vector3.new(99999, 99999, 99999) -- Yüksek dönüş hızı (Fling için bu şarttır)
                     bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                     bav.P = math.huge
                     bav.Parent = myHRP
-
-                    local flingDuration = 1.0 
+                    
+                    -- Fling süresi: 3 Saniye
+                    local flingDuration = 3.0 
                     local startTime = tick()
                     
                     local conn
@@ -822,9 +815,11 @@ local function RefreshPlayerList()
                         end
                         
                         if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                            bpos.Position = tHRP.Position
-                            -- Momentum transferi: Eger oyun carpismaya izin veriyorsa adam ucar
-                            myHRP.Velocity = Vector3.new(10000, 10000, 10000)
+                            -- Lineer hız (Velocity) vermek harita dışına uçurur. 
+                            -- Onun yerine tam içine girip (CFrame) sadece dönme hızı (RotVelocity) veriyoruz.
+                            myHRP.CFrame = tHRP.CFrame
+                            myHRP.Velocity = Vector3.new(0, 0, 0)
+                            myHRP.RotVelocity = Vector3.new(99999, 99999, 99999)
                         else
                             conn:Disconnect()
                         end
@@ -833,15 +828,14 @@ local function RefreshPlayerList()
                     task.wait(flingDuration + 0.1)
                     if conn then conn:Disconnect() end
                     if bav then bav:Destroy() end
-                    if bpos then bpos:Destroy() end
                     
                     if hum then 
                         hum.PlatformStand = false
                         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                     end
                     
-                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN KİLİT
-                    local lockDuration = 1.0
+                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN KİLİT (3 Saniye)
+                    local lockDuration = 3.0
                     local lockStartTime = tick()
                     local lockConn
                     
@@ -855,6 +849,7 @@ local function RefreshPlayerList()
                             return
                         end
                         
+                        -- 3 saniye boyunca başlangıç pozisyonunda kilitli kal
                         if myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myChar.HumanoidRootPart.CFrame = oldCFrame
                             myChar.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
