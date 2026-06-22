@@ -770,7 +770,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 C-FRAME YERİNE "BODYPOSITION" KULLANAN KUSURSUZ MIKNATIS FLİNG 
+        -- 🌀 KUSURSUZ FLİNG: HARİTA DIŞINA UÇMAYI KESİN ENGELLEYEN SİSTEM
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -802,13 +802,6 @@ local function RefreshPlayerList()
                     bav.AngularVelocity = Vector3.new(90000, 90000, 90000)
                     bav.Parent = myHRP
                     
-                    -- Zıplayan/hareket eden hedefi MIKNATIS GİBİ çeken fizik objesi
-                    local bp = Instance.new("BodyPosition")
-                    bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                    bp.P = 500000 -- Anında ışınlamak için devasa çekim gücü
-                    bp.D = 500
-                    bp.Parent = myHRP
-
                     local flingDuration = 3.0 
                     local startTime = tick()
                     
@@ -821,11 +814,16 @@ local function RefreshPlayerList()
                         
                         local tHRP = tChar:FindFirstChild("HumanoidRootPart")
                         if tHRP then
-                            -- ÇOK ÖNEMLİ: CFrame ile sabit ışınlanmak yerine BodyPosition ile peşinden sürüklüyoruz.
-                            -- Hedefin Hızını (Velocity) hesaplayarak zıplayacağı noktanın 0.1 saniye ilerisine nokta atışı yapıyoruz.
-                            bp.Position = tHRP.Position + (tHRP.AssemblyLinearVelocity * 0.1)
+                            -- ⚠️ HARİTA DIŞINA UÇMAMAK İÇİN EN ÖNEMLİ KOD:
+                            -- Kendi doğrusal hızımızı (Velocity) sıfırlıyoruz ki sekmeyelim!
+                            myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            myHRP.Velocity = Vector3.new(0, 0, 0)
                             
-                            -- Garanti olsun diye kendi rotasyon hızımızı güncelliyoruz
+                            -- ADAMIN İÇİNE MIKNATIS GİBİ YAPIŞ: 
+                            -- (Fizik motorunu çarpışmaya zorlamak için hafif bir sapma (offset) ekliyoruz)
+                            myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-10,10)/100, 0, math.random(-10,10)/100)
+                            
+                            -- Delicesine dönmeye devam et
                             myHRP.RotVelocity = Vector3.new(90000, 90000, 90000)
                         else
                             conn:Disconnect()
@@ -835,7 +833,6 @@ local function RefreshPlayerList()
                     task.wait(flingDuration)
                     if conn then conn:Disconnect() end
                     if bav then bav:Destroy() end
-                    if bp then bp:Destroy() end
                     
                     if hum then 
                         hum.PlatformStand = false
@@ -857,11 +854,13 @@ local function RefreshPlayerList()
                             return
                         end
                         
-                        -- 3 Saniye boyunca kilitli tut
+                        -- 3 Saniye boyunca kilitli tut ve hızını tamamen sıfırla
                         if myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myChar.HumanoidRootPart.CFrame = oldCFrame
                             myChar.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                             myChar.HumanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            myChar.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+                            myChar.HumanoidRootPart.RotVelocity = Vector3.new(0, 0, 0)
                         end
                     end)
                 end)
