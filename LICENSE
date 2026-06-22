@@ -49,6 +49,7 @@ local maxFlySpeed, maxWalkSpeed = 700, 700
 local isFlying = false
 local isSpeedEnabled = false
 local isInfJumpEnabled, isNoclipEnabled, isGlobalESPEnabled = false, false, false
+local isFlingingActively = false -- Fling sırasında çakışmaları (Noclip vb.) önlemek için
 
 -- İzleme (Spectate) & Ard Arda TP (Loop TP) Değişkenleri
 local spectatedPlayer = nil
@@ -527,6 +528,7 @@ JumpToggle.MouseButton1Click:Connect(ToggleJump); SetupKeybind(JumpKey, "Jump", 
 local function UpdateNoclip()
     if isNoclipEnabled then
         noclipLoop = RunService.Stepped:Connect(function()
+            if isFlingingActively then return end -- FLİNG SIRASINDA NOCLİP DEVRE DIŞI BIRAKILIR Kİ ADAMLA ÇARPIŞILABİLSİN
             local char = LocalPlayer.Character
             if char then
                 for _, part in ipairs(char:GetDescendants()) do
@@ -769,7 +771,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 BODYTHRUST SİLİNDİ: Tam adamın içine girerek %100 uçuracak! 3 Saniye Locklu.
+        -- 🌀 GELİŞTİRİLMİŞ FLING BUTONU: Artık hedefi %100 uçurur!
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -783,6 +785,7 @@ local function RefreshPlayerList()
             
             if myChar and tChar and myChar:FindFirstChild("HumanoidRootPart") and tChar:FindFirstChild("HumanoidRootPart") then
                 isFlinging = true
+                isFlingingActively = true -- Noclip ile çakışmayı ve içinden geçmeyi engeller
                 currentFlingTarget = player 
                 FlingBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
                 
@@ -801,9 +804,13 @@ local function RefreshPlayerList()
                     bav.P = math.huge
                     bav.Parent = myHRP
                     
-                    -- BODYTHRUST SİLİNDİ ÇÜNKÜ SENİ UZAYA FIRLATIYORDU!
+                    -- BodyThrust geri eklendi! Çarpışmada uçurtmayı sağlayan asıl itme kuvveti budur.
+                    local thrust = Instance.new("BodyThrust")
+                    thrust.Force = Vector3.new(9999, 9999, 9999)
+                    thrust.Location = myHRP.Position
+                    thrust.Parent = myHRP
 
-                    local flingDuration = 2.5
+                    local flingDuration = 1.5 -- Daha hızlı bir etki için 1.5 saniye yapıldı
                     local startTime = tick()
                     
                     local conn
@@ -814,9 +821,9 @@ local function RefreshPlayerList()
                         end
                         
                         if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                            -- Hedefin tam 100% içine gir (CFrame'i milimetrik eşitliyoruz)
-                            myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                            myHRP.CFrame = tHRP.CFrame
+                            -- Hedefin içine tam eşit girmek yerine, hafif jitter (titretme) yaratıyoruz 
+                            -- ve AssemblyLinearVelocity değerini bilerek SIFIRLAMIYORUZ! (Sıfırlamak Fling'i bozuyordu)
+                            myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-10,10)/100, 0, math.random(-10,10)/100)
                         else
                             conn:Disconnect()
                         end
@@ -825,14 +832,19 @@ local function RefreshPlayerList()
                     task.wait(flingDuration + 0.1)
                     if conn then conn:Disconnect() end
                     if bav then bav:Destroy() end
+                    if thrust then thrust:Destroy() end
+                    
+                    -- Geri dönmeden önce momentumu sıfırla ki uzaya fırlamayasın
+                    myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    myHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                     
                     if hum then 
                         hum.PlatformStand = false
                         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                     end
                     
-                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN 3 SANİYELİK LOCK (KİLİT)
-                    local lockDuration = 3.0
+                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN 1.5 SANİYELİK LOCK (KİLİT)
+                    local lockDuration = 1.5
                     local lockStartTime = tick()
                     local lockConn
                     
@@ -840,12 +852,13 @@ local function RefreshPlayerList()
                         if tick() - lockStartTime > lockDuration then
                             lockConn:Disconnect()
                             isFlinging = false
+                            isFlingingActively = false
                             currentFlingTarget = nil
                             FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
                             return
                         end
                         
-                        -- Karakteri güvenli pozisyonunda sabitler, dışarı fırlamasını %100 önler
+                        -- Karakteri güvenli pozisyonunda sabitler, dışarı fırlamasını önler
                         if myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myChar.HumanoidRootPart.CFrame = oldCFrame
                             myChar.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
