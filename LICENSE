@@ -19,7 +19,7 @@ local NebulaConfig = {
         Fly = "F", WalkSpeed = "Z", Spin = "C",
         Jump = "None", Noclip = "None", GlobalESP = "E",
         AutoTP = "None", MM2ESP = "None", AutoGrab = "None", AntiFling = "None",
-        MenuToggle = "RightShift", KillAll = "None"
+        MenuToggle = "RightShift", KillAll = "None", KillMurderer = "None"
     }
 }
 
@@ -69,11 +69,12 @@ local isMM2ESPEnabled = false
 local isAutoGrabEnabled = false
 local isAntiFlingEnabled = false
 local isKillAllEnabled = false
+local isKillMurdererEnabled = false
 local grabbingGun = false
 local currentKatil = nil
 local currentSheriff = nil
 
-local flyLoop, speedLoop, infJumpConnection, spinLoop, noclipLoop, mm2ESPLoop, autoGrabLoop, antiFlingLoop, killAllLoop
+local flyLoop, speedLoop, infJumpConnection, spinLoop, noclipLoop, mm2ESPLoop, autoGrabLoop, antiFlingLoop, killAllLoop, killMurdererLoop
 local eventConnections = {} 
 local activeESPs = {} 
 
@@ -883,6 +884,7 @@ local MM2ESPMod, MM2ESPToggle, _, MM2ESPKey = CreateModule("🔪 MM2 Rol ESP (Ş
 local AutoGrabMod, AutoGrabToggle, _, AutoGrabKey = CreateModule("🔫 Auto Grab Gun (Silah Kap)", false, MM2ScrollFrame)
 local AntiFlingMod, AntiFlingToggle, _, AntiFlingKey = CreateModule("🛡️ Anti Fling (Çarpışma Kapat)", false, MM2ScrollFrame)
 local KillAllMod, KillAllToggle, _, KillAllKey = CreateModule("💀 Kill All (Herkesi Yanına Çek)", false, MM2ScrollFrame)
+local KillMurdererMod, KillMurdererToggle, _, KillMurdererKey = CreateModule("🎯 Katili Yanına Çek (Vurmak İçin)", false, MM2ScrollFrame)
 
 -- Kill All Fonksiyonları
 local function UpdateKillAll()
@@ -908,6 +910,31 @@ local function UpdateKillAll()
 end
 local function ToggleKillAll() isKillAllEnabled = not isKillAllEnabled; UpdateUI(KillAllToggle, isKillAllEnabled); UpdateKillAll() end
 KillAllToggle.MouseButton1Click:Connect(ToggleKillAll); SetupKeybind(KillAllKey, "KillAll", ToggleKillAll)
+
+-- Kill Murderer (Katili Çek) Fonksiyonları
+local function UpdateKillMurderer()
+    if isKillMurdererEnabled then
+        killMurdererLoop = RunService.Stepped:Connect(function()
+            local myChar = LocalPlayer.Character
+            -- currentKatil değişkeni ESP algılayıcısı tarafından otomatik atanır
+            if myChar and myChar:FindFirstChild("HumanoidRootPart") and currentKatil then
+                local myHRP = myChar.HumanoidRootPart
+                local tChar = currentKatil.Character
+                if tChar and tChar:FindFirstChild("HumanoidRootPart") then
+                    local hum = tChar:FindFirstChild("Humanoid")
+                    if hum and hum.Health > 0 then
+                        -- Katili senin 12 stud önüne (güvenli ateş mesafesine) sabitler
+                        tChar.HumanoidRootPart.CFrame = myHRP.CFrame * CFrame.new(0, 0, -12)
+                    end
+                end
+            end
+        end)
+    else
+        if killMurdererLoop then killMurdererLoop:Disconnect(); killMurdererLoop = nil end
+    end
+end
+local function ToggleKillMurderer() isKillMurdererEnabled = not isKillMurdererEnabled; UpdateUI(KillMurdererToggle, isKillMurdererEnabled); UpdateKillMurderer() end
+KillMurdererToggle.MouseButton1Click:Connect(ToggleKillMurderer); SetupKeybind(KillMurdererKey, "KillMurderer", ToggleKillMurderer)
 
 -- Silahları Kontrol Et ve ESP Güncellemesi
 local function CheckToolsForRole(player)
@@ -940,7 +967,8 @@ end
 local lastRoleCheck = 0
 RunService.Heartbeat:Connect(function()
     if not isMM2ESPEnabled then return end
-    if tick() - lastRoleCheck >= 0.5 then
+    -- TESPİT SÜRESİ 0.5'ten 0.05'e DÜŞÜRÜLDÜ (ÇOK DAHA HIZLI)
+    if tick() - lastRoleCheck >= 0.05 then
         lastRoleCheck = tick()
         local tKatil, tSheriff = nil, nil
         for _, p in ipairs(Players:GetPlayers()) do
@@ -1115,6 +1143,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     isAutoTPEnabled = false; UpdateAutoTP()
     isAntiFlingEnabled = false; UpdateAntiFling()
     isKillAllEnabled = false; UpdateKillAll()
+    isKillMurdererEnabled = false; UpdateKillMurderer()
     
     spectatedPlayer = nil; UpdateSpectate()
     attachedPlayer = nil; UpdateAttach()
