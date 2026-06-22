@@ -71,7 +71,7 @@ local isKillMurdererEnabled = false
 local grabbingGun = false
 local currentKatil = nil
 local currentSheriff = nil
-local currentFlingTarget = nil -- Fırlatılan hedefi anti-fling'den korumak için
+local currentFlingTarget = nil 
 
 local flyLoop, speedLoop, infJumpConnection, noclipLoop, mm2ESPLoop, autoGrabLoop, antiFlingLoop, killAllLoop, killMurdererLoop
 local eventConnections = {} 
@@ -866,7 +866,8 @@ local MM2ESPMod, MM2ESPToggle, _, MM2ESPKey = CreateModule("🔪 MM2 Rol ESP (Ş
 local AutoGrabMod, AutoGrabToggle, _, AutoGrabKey = CreateModule("🔫 Auto Grab Gun (Silah Kap)", false, MM2ScrollFrame)
 local AntiFlingMod, AntiFlingToggle, _, AntiFlingKey = CreateModule("🛡️ Anti Fling (Çarpışma Kapat)", false, MM2ScrollFrame)
 local KillAllMod, KillAllToggle, _, KillAllKey = CreateModule("💀 Kill All (Herkesi Yanına Çek)", false, MM2ScrollFrame)
-local KillMurdererMod, KillMurdererToggle, _, KillMurdererKey = CreateModule("🎯 Katili Yanına Çek (Vurmak İçin)", false, MM2ScrollFrame)
+-- BAŞLIK GÜNCELLENDİ (KATİLİN ÜSTÜNE IŞINLAN)
+local KillMurdererMod, KillMurdererToggle, _, KillMurdererKey = CreateModule("🎯 Katile Işınlan (Havadan Vur)", false, MM2ScrollFrame)
 
 -- Kill All Fonksiyonları
 local function UpdateKillAll()
@@ -893,7 +894,7 @@ end
 local function ToggleKillAll() isKillAllEnabled = not isKillAllEnabled; UpdateUI(KillAllToggle, isKillAllEnabled); UpdateKillAll() end
 KillAllToggle.MouseButton1Click:Connect(ToggleKillAll); SetupKeybind(KillAllKey, "KillAll", ToggleKillAll)
 
--- Kill Murderer (Katili Çek) Fonksiyonları
+-- Kill Murderer (Katile Işınlan) Fonksiyonları - SUNUCU DESTEKLİ MERMİ GÜNCELLEMESİ
 local function UpdateKillMurderer()
     if isKillMurdererEnabled then
         killMurdererLoop = RunService.Stepped:Connect(function()
@@ -905,8 +906,10 @@ local function UpdateKillMurderer()
                 if tChar and tChar:FindFirstChild("HumanoidRootPart") then
                     local hum = tChar:FindFirstChild("Humanoid")
                     if hum and hum.Health > 0 then
-                        -- Katili senin 12 stud önüne (güvenli ateş mesafesine) sabitler
-                        tChar.HumanoidRootPart.CFrame = myHRP.CFrame * CFrame.new(0, 0, -12)
+                        -- BİZ KATİLE GİDİYORUZ! Katilin 15 stud üstüne çıkıp doğrudan ona bakıyoruz
+                        -- Bu sayede sunucu senin tam olarak orada olduğunu doğrular ve sıktığın mermiler hasar vurur
+                        myHRP.CFrame = CFrame.new(tChar.HumanoidRootPart.Position + Vector3.new(0, 15, 0), tChar.HumanoidRootPart.Position)
+                        myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                     end
                 end
             end
