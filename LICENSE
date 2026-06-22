@@ -770,7 +770,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 DONMA VE GECİKME SORUNU ÇÖZÜLMÜŞ, HAREKETLİ HEDEFE ANINDA VURAN FLING
+        -- 🌀 C-FRAME YERİNE "BODYPOSITION" KULLANAN KUSURSUZ MIKNATIS FLİNG 
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -790,28 +790,43 @@ local function RefreshPlayerList()
                 
                 task.spawn(function()
                     local myHRP = myChar.HumanoidRootPart
-                    local tHRP = tChar.HumanoidRootPart
-                    local oldCFrame = myHRP.CFrame
                     local hum = myChar:FindFirstChildOfClass("Humanoid")
                     
+                    local oldCFrame = myHRP.CFrame
                     if hum then hum.PlatformStand = true end
                     
+                    -- Fiziği (çarpışmaları) aktif tutan devasa dönüş objesi
+                    local bav = Instance.new("BodyAngularVelocity")
+                    bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    bav.P = math.huge
+                    bav.AngularVelocity = Vector3.new(90000, 90000, 90000)
+                    bav.Parent = myHRP
+                    
+                    -- Zıplayan/hareket eden hedefi MIKNATIS GİBİ çeken fizik objesi
+                    local bp = Instance.new("BodyPosition")
+                    bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bp.P = 500000 -- Anında ışınlamak için devasa çekim gücü
+                    bp.D = 500
+                    bp.Parent = myHRP
+
                     local flingDuration = 3.0 
                     local startTime = tick()
                     
                     local conn
-                    -- RunService.Stepped fiziksel hesaplamalardan tam önce çalıştığı için Fling'in en güçlü halidir.
-                    conn = RunService.Stepped:Connect(function()
+                    conn = RunService.Heartbeat:Connect(function()
                         if tick() - startTime > flingDuration then
                             conn:Disconnect()
                             return
                         end
                         
-                        -- Adamı anında takip et ve zıplıyorsa hareket ediyorsa Hızını (Velocity) kopyala
-                        if tChar and tChar:FindFirstChild("HumanoidRootPart") and myChar and myChar:FindFirstChild("HumanoidRootPart") then
-                            myHRP.CFrame = tHRP.CFrame
-                            myHRP.Velocity = tHRP.Velocity -- Zıplamasına/Koşmasına kusursuz ayak uydurur
-                            myHRP.RotVelocity = Vector3.new(50000, 50000, 50000) -- Sıfır gecikmeyle anında tam güç dönüş
+                        local tHRP = tChar:FindFirstChild("HumanoidRootPart")
+                        if tHRP then
+                            -- ÇOK ÖNEMLİ: CFrame ile sabit ışınlanmak yerine BodyPosition ile peşinden sürüklüyoruz.
+                            -- Hedefin Hızını (Velocity) hesaplayarak zıplayacağı noktanın 0.1 saniye ilerisine nokta atışı yapıyoruz.
+                            bp.Position = tHRP.Position + (tHRP.AssemblyLinearVelocity * 0.1)
+                            
+                            -- Garanti olsun diye kendi rotasyon hızımızı güncelliyoruz
+                            myHRP.RotVelocity = Vector3.new(90000, 90000, 90000)
                         else
                             conn:Disconnect()
                         end
@@ -819,6 +834,8 @@ local function RefreshPlayerList()
                     
                     task.wait(flingDuration)
                     if conn then conn:Disconnect() end
+                    if bav then bav:Destroy() end
+                    if bp then bp:Destroy() end
                     
                     if hum then 
                         hum.PlatformStand = false
@@ -840,11 +857,11 @@ local function RefreshPlayerList()
                             return
                         end
                         
-                        -- 3 saniye boyunca orijinal yerinde sabit kilitli tut
+                        -- 3 Saniye boyunca kilitli tut
                         if myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myChar.HumanoidRootPart.CFrame = oldCFrame
-                            myChar.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
-                            myChar.HumanoidRootPart.RotVelocity = Vector3.new(0, 0, 0)
+                            myChar.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            myChar.HumanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
                         end
                     end)
                 end)
