@@ -652,7 +652,6 @@ AddPosBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- TP SÜRESİ 0.2 OLARAK GÜNCELLENDİ
 local AutoTPMod, AutoTPToggle, _, AutoTPKey = CreateModule("⏱️ Otomatik TP (0.2 Saniye)", false, LocScrollFrame)
 local function UpdateAutoTP()
     if isAutoTPEnabled then
@@ -769,7 +768,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 KUSURSUZ ÇALIŞAN FLING & KİLİT (LOCK) EKLENMİŞ HALİ
+        -- 🌀 KUSURSUZ ÇALIŞAN FLING & 4 SANİYE KİLİT EKLENMİŞ HALİ
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -794,14 +793,12 @@ local function RefreshPlayerList()
                     
                     if hum then hum.PlatformStand = true end
                     
-                    -- Şiddetli dönüş (Eski Orijinal Değer: 99999) - Roblox bunu mükemmel işliyor
                     local bav = Instance.new("BodyAngularVelocity")
                     bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
                     bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                     bav.P = math.huge
                     bav.Parent = myHRP
                     
-                    -- Şiddetli İtme Kuvveti (Eski Orijinal Değer: 99999)
                     local thrust = Instance.new("BodyThrust")
                     thrust.Force = Vector3.new(99999, 99999, 99999)
                     thrust.Location = myHRP.Position
@@ -818,7 +815,6 @@ local function RefreshPlayerList()
                         end
                         
                         if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                            -- Milimetrik Titreme / Overlap (Adamın kusursuzca içine girip çarpışma hatası yaratır)
                             myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-10, 10)/100, math.random(-10, 10)/100, math.random(-10, 10)/100)
                             myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                             myHRP.AssemblyAngularVelocity = Vector3.new(99999, 99999, 99999)
@@ -837,8 +833,8 @@ local function RefreshPlayerList()
                         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                     end
                     
-                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN 2 SANİYELİK LOCK (KİLİT)
-                    local lockDuration = 2.0
+                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN 4 SANİYELİK LOCK (KİLİT)
+                    local lockDuration = 4.0
                     local lockStartTime = tick()
                     local lockConn
                     
@@ -851,7 +847,6 @@ local function RefreshPlayerList()
                             return
                         end
                         
-                        -- Karakteri sürekli olarak eski güvenli konumuna kilitler, fizik motorunun momentumunu sıfırlar
                         if myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myChar.HumanoidRootPart.CFrame = oldCFrame
                             myChar.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -1050,6 +1045,7 @@ local function CheckIfHasGun(parent)
     return false
 end
 
+-- SİLAHI SENİN YANINA ÇEKEN (SENİ IŞINLAMAYAN) AUTO GRAB FONKSİYONU
 local function UpdateAutoGrab()
     if isAutoGrabEnabled then
         autoGrabLoop = RunService.Heartbeat:Connect(function()
@@ -1062,26 +1058,41 @@ local function UpdateAutoGrab()
             if gunDrop then
                 grabbingGun = true
                 task.spawn(function()
-                    local oldCFrame = hrp.CFrame
-                    local cam = workspace.CurrentCamera; local oldCamCFrame = cam.CFrame
-                    local dropCFrame
-                    if gunDrop:IsA("Model") then dropCFrame = gunDrop:GetPivot() elseif gunDrop:IsA("BasePart") then dropCFrame = gunDrop.CFrame end
+                    local playerCFrame = hrp.CFrame
                     
-                    if dropCFrame then
-                        pcall(function()
-                            if gunDrop:IsA("Model") then gunDrop:PivotTo(oldCFrame) elseif gunDrop:IsA("BasePart") then gunDrop.CFrame = oldCFrame end
-                        end)
-                        cam.CameraType = Enum.CameraType.Scriptable; cam.CFrame = oldCamCFrame
-                        hrp.CFrame = dropCFrame; hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-                        if firetouchinterest then
-                            if gunDrop:IsA("BasePart") then pcall(firetouchinterest, hrp, gunDrop, 0); pcall(firetouchinterest, hrp, gunDrop, 1) end
-                            for _, part in ipairs(gunDrop:GetDescendants()) do if part:IsA("BasePart") then pcall(firetouchinterest, hrp, part, 0); pcall(firetouchinterest, hrp, part, 1) end end
+                    -- SADECE SİLAHI OYUNCUNUN YANINA ÇEKER (Oyuncu yerinden kıpırdamaz)
+                    pcall(function()
+                        if gunDrop:IsA("Model") then 
+                            gunDrop:PivotTo(playerCFrame) 
+                        elseif gunDrop:IsA("BasePart") then 
+                            gunDrop.CFrame = playerCFrame 
                         end
-                        RunService.Heartbeat:Wait()
-                        hrp.CFrame = oldCFrame; hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
-                        cam.CameraType = Enum.CameraType.Custom
+                        
+                        -- Silahın altındaki tüm parçaları da garanti olsun diye oyuncunun konumuna çek
+                        for _, part in ipairs(gunDrop:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CFrame = playerCFrame
+                                part.AssemblyLinearVelocity = Vector3.new(0,0,0)
+                            end
+                        end
+                    end)
+
+                    -- Dokunma hissini simüle ederek sunucunun silahı verdiğini doğrulaması
+                    if firetouchinterest then
+                        if gunDrop:IsA("BasePart") then 
+                            pcall(firetouchinterest, hrp, gunDrop, 0)
+                            pcall(firetouchinterest, hrp, gunDrop, 1) 
+                        end
+                        for _, part in ipairs(gunDrop:GetDescendants()) do 
+                            if part:IsA("BasePart") then 
+                                pcall(firetouchinterest, hrp, part, 0)
+                                pcall(firetouchinterest, hrp, part, 1) 
+                            end 
+                        end
                     end
-                    task.wait(0.2); grabbingGun = false
+                    
+                    task.wait(0.2)
+                    grabbingGun = false
                 end)
             end
         end)
