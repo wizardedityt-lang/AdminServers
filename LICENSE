@@ -652,6 +652,7 @@ AddPosBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- TP SÜRESİ 0.2 OLARAK GÜNCELLENDİ
 local AutoTPMod, AutoTPToggle, _, AutoTPKey = CreateModule("⏱️ Otomatik TP (0.2 Saniye)", false, LocScrollFrame)
 local function UpdateAutoTP()
     if isAutoTPEnabled then
@@ -768,7 +769,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 KUSURSUZ ÇALIŞAN FLING & 4 SANİYE KİLİT EKLENMİŞ HALİ
+        -- 🌀 BODYTHRUST SİLİNDİ: Tam adamın içine girerek %100 uçuracak! 3 Saniye Locklu.
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -793,31 +794,29 @@ local function RefreshPlayerList()
                     
                     if hum then hum.PlatformStand = true end
                     
+                    -- Fırıldak gibi dönmeni sağlayan açısal güç (Fırlatmanın Sırrı Burada)
                     local bav = Instance.new("BodyAngularVelocity")
                     bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
                     bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                     bav.P = math.huge
                     bav.Parent = myHRP
                     
-                    local thrust = Instance.new("BodyThrust")
-                    thrust.Force = Vector3.new(99999, 99999, 99999)
-                    thrust.Location = myHRP.Position
-                    thrust.Parent = myHRP
-                    
+                    -- BODYTHRUST SİLİNDİ ÇÜNKÜ SENİ UZAYA FIRLATIYORDU!
+
                     local flingDuration = 2.5
                     local startTime = tick()
                     
                     local conn
-                    conn = RunService.Stepped:Connect(function()
+                    conn = RunService.Heartbeat:Connect(function()
                         if tick() - startTime > flingDuration then
                             conn:Disconnect()
                             return
                         end
                         
                         if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                            myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-10, 10)/100, math.random(-10, 10)/100, math.random(-10, 10)/100)
+                            -- Hedefin tam 100% içine gir (CFrame'i milimetrik eşitliyoruz)
                             myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                            myHRP.AssemblyAngularVelocity = Vector3.new(99999, 99999, 99999)
+                            myHRP.CFrame = tHRP.CFrame
                         else
                             conn:Disconnect()
                         end
@@ -826,15 +825,14 @@ local function RefreshPlayerList()
                     task.wait(flingDuration + 0.1)
                     if conn then conn:Disconnect() end
                     if bav then bav:Destroy() end
-                    if thrust then thrust:Destroy() end
                     
                     if hum then 
                         hum.PlatformStand = false
                         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                     end
                     
-                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN 4 SANİYELİK LOCK (KİLİT)
-                    local lockDuration = 4.0
+                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN 3 SANİYELİK LOCK (KİLİT)
+                    local lockDuration = 3.0
                     local lockStartTime = tick()
                     local lockConn
                     
@@ -847,6 +845,7 @@ local function RefreshPlayerList()
                             return
                         end
                         
+                        -- Karakteri güvenli pozisyonunda sabitler, dışarı fırlamasını %100 önler
                         if myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myChar.HumanoidRootPart.CFrame = oldCFrame
                             myChar.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -1068,7 +1067,6 @@ local function UpdateAutoGrab()
                             gunDrop.CFrame = playerCFrame 
                         end
                         
-                        -- Silahın altındaki tüm parçaları da garanti olsun diye oyuncunun konumuna çek
                         for _, part in ipairs(gunDrop:GetDescendants()) do
                             if part:IsA("BasePart") then
                                 part.CFrame = playerCFrame
@@ -1077,7 +1075,6 @@ local function UpdateAutoGrab()
                         end
                     end)
 
-                    -- Dokunma hissini simüle ederek sunucunun silahı verdiğini doğrulaması
                     if firetouchinterest then
                         if gunDrop:IsA("BasePart") then 
                             pcall(firetouchinterest, hrp, gunDrop, 0)
