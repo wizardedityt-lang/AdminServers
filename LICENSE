@@ -49,7 +49,7 @@ local maxFlySpeed, maxWalkSpeed = 700, 700
 local isFlying = false
 local isSpeedEnabled = false
 local isInfJumpEnabled, isNoclipEnabled, isGlobalESPEnabled = false, false, false
-local isFlingingActively = false -- Fling sırasında çakışmaları (Noclip vb.) önlemek için
+local isFlingingActively = false
 
 -- İzleme (Spectate) & Ard Arda TP (Loop TP) Değişkenleri
 local spectatedPlayer = nil
@@ -528,7 +528,7 @@ JumpToggle.MouseButton1Click:Connect(ToggleJump); SetupKeybind(JumpKey, "Jump", 
 local function UpdateNoclip()
     if isNoclipEnabled then
         noclipLoop = RunService.Stepped:Connect(function()
-            if isFlingingActively then return end -- FLİNG SIRASINDA NOCLİP DEVRE DIŞI BIRAKILIR Kİ ADAMLA ÇARPIŞILABİLSİN
+            if isFlingingActively then return end 
             local char = LocalPlayer.Character
             if char then
                 for _, part in ipairs(char:GetDescendants()) do
@@ -654,7 +654,6 @@ AddPosBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- TP SÜRESİ 0.2 OLARAK GÜNCELLENDİ
 local AutoTPMod, AutoTPToggle, _, AutoTPKey = CreateModule("⏱️ Otomatik TP (0.2 Saniye)", false, LocScrollFrame)
 local function UpdateAutoTP()
     if isAutoTPEnabled then
@@ -771,7 +770,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 GELİŞTİRİLMİŞ FLING BUTONU: Artık hedefi %100 uçurur!
+        -- 🌀 DONMA SORUNU ÇÖZÜLMÜŞ GELİŞMİŞ FLING BUTONU
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -785,7 +784,7 @@ local function RefreshPlayerList()
             
             if myChar and tChar and myChar:FindFirstChild("HumanoidRootPart") and tChar:FindFirstChild("HumanoidRootPart") then
                 isFlinging = true
-                isFlingingActively = true -- Noclip ile çakışmayı ve içinden geçmeyi engeller
+                isFlingingActively = true 
                 currentFlingTarget = player 
                 FlingBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
                 
@@ -797,20 +796,22 @@ local function RefreshPlayerList()
                     
                     if hum then hum.PlatformStand = true end
                     
-                    -- Fırıldak gibi dönmeni sağlayan açısal güç (Fırlatmanın Sırrı Burada)
+                    -- CFrame ile spamlamak yerine BodyPosition ile mermi gibi hedefe ucalim
+                    local bpos = Instance.new("BodyPosition")
+                    bpos.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    bpos.P = 100000
+                    bpos.D = 100
+                    bpos.Position = tHRP.Position
+                    bpos.Parent = myHRP
+                    
+                    -- Hiz (99999) hatasi NaN verdirip karakteri donduruyordu, 10000'e sabitlendi.
                     local bav = Instance.new("BodyAngularVelocity")
-                    bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
+                    bav.AngularVelocity = Vector3.new(10000, 10000, 10000)
                     bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                     bav.P = math.huge
                     bav.Parent = myHRP
-                    
-                    -- BodyThrust geri eklendi! Çarpışmada uçurtmayı sağlayan asıl itme kuvveti budur.
-                    local thrust = Instance.new("BodyThrust")
-                    thrust.Force = Vector3.new(9999, 9999, 9999)
-                    thrust.Location = myHRP.Position
-                    thrust.Parent = myHRP
 
-                    local flingDuration = 1.5 -- Daha hızlı bir etki için 1.5 saniye yapıldı
+                    local flingDuration = 1.0 
                     local startTime = tick()
                     
                     local conn
@@ -821,9 +822,9 @@ local function RefreshPlayerList()
                         end
                         
                         if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                            -- Hedefin içine tam eşit girmek yerine, hafif jitter (titretme) yaratıyoruz 
-                            -- ve AssemblyLinearVelocity değerini bilerek SIFIRLAMIYORUZ! (Sıfırlamak Fling'i bozuyordu)
-                            myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-10,10)/100, 0, math.random(-10,10)/100)
+                            bpos.Position = tHRP.Position
+                            -- Momentum transferi: Eger oyun carpismaya izin veriyorsa adam ucar
+                            myHRP.Velocity = Vector3.new(10000, 10000, 10000)
                         else
                             conn:Disconnect()
                         end
@@ -832,19 +833,15 @@ local function RefreshPlayerList()
                     task.wait(flingDuration + 0.1)
                     if conn then conn:Disconnect() end
                     if bav then bav:Destroy() end
-                    if thrust then thrust:Destroy() end
-                    
-                    -- Geri dönmeden önce momentumu sıfırla ki uzaya fırlamayasın
-                    myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    myHRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    if bpos then bpos:Destroy() end
                     
                     if hum then 
                         hum.PlatformStand = false
                         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                     end
                     
-                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN 1.5 SANİYELİK LOCK (KİLİT)
-                    local lockDuration = 1.5
+                    -- HARİTA DIŞINA DÜŞMEYİ ENGELLEYEN KİLİT
+                    local lockDuration = 1.0
                     local lockStartTime = tick()
                     local lockConn
                     
@@ -858,11 +855,10 @@ local function RefreshPlayerList()
                             return
                         end
                         
-                        -- Karakteri güvenli pozisyonunda sabitler, dışarı fırlamasını önler
                         if myChar and myChar:FindFirstChild("HumanoidRootPart") then
                             myChar.HumanoidRootPart.CFrame = oldCFrame
-                            myChar.HumanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                            myChar.HumanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            myChar.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+                            myChar.HumanoidRootPart.RotVelocity = Vector3.new(0, 0, 0)
                         end
                     end)
                 end)
