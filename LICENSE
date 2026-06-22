@@ -12,11 +12,10 @@ local configName = "NebulaHub_Config.json"
 local NebulaConfig = {
     Sliders = {
         FlySpeed = 50,
-        WalkSpeed = 50,
-        SpinSpeed = 100
+        WalkSpeed = 50
     },
     Keybinds = {
-        Fly = "F", WalkSpeed = "Z", Spin = "C",
+        Fly = "F", WalkSpeed = "Z",
         Jump = "None", Noclip = "None", GlobalESP = "E",
         AutoTP = "None", MM2ESP = "None", AutoGrab = "None", AntiFling = "None",
         MenuToggle = "RightShift", KillAll = "None", KillMurderer = "None"
@@ -46,10 +45,9 @@ end
 LoadConfig()
 
 -- // Değişkenler //
-local maxFlySpeed, maxWalkSpeed, maxSpinSpeed = 700, 700, 7000 
+local maxFlySpeed, maxWalkSpeed = 700, 700 
 local isFlying = false
 local isSpeedEnabled = false
-local isSpinning = false
 local isInfJumpEnabled, isNoclipEnabled, isGlobalESPEnabled = false, false, false
 
 -- İzleme (Spectate) & Ard Arda TP (Loop TP) Değişkenleri
@@ -74,7 +72,7 @@ local grabbingGun = false
 local currentKatil = nil
 local currentSheriff = nil
 
-local flyLoop, speedLoop, infJumpConnection, spinLoop, noclipLoop, mm2ESPLoop, autoGrabLoop, antiFlingLoop, killAllLoop, killMurdererLoop
+local flyLoop, speedLoop, infJumpConnection, noclipLoop, mm2ESPLoop, autoGrabLoop, antiFlingLoop, killAllLoop, killMurdererLoop
 local eventConnections = {} 
 local activeESPs = {} 
 
@@ -435,7 +433,6 @@ end
 -- ==========================================
 local FlyMod, FlyToggle, FlySlider, FlyKey = CreateModule("🚀 Uçma (Fly)", true, MainScrollFrame)
 local SpeedMod, SpeedToggle, SpeedSlider, SpeedKey = CreateModule("⚡ Hız (WalkSpeed)", true, MainScrollFrame)
-local SpinMod, SpinToggle, SpinSlider, SpinKey = CreateModule("🌪️ Spinbot", true, MainScrollFrame)
 local JumpMod, JumpToggle, _, JumpKey = CreateModule("🦘 Sınırsız Zıplama", false, MainScrollFrame)
 local NoclipMod, NoclipToggle, _, NoclipKey = CreateModule("👻 Noclip (Duvarlardan Geç)", false, MainScrollFrame)
 local GlobalESPMod, GlobalESPToggle, _, GlobalESPKey = CreateModule("👁️ Global ESP", false, MainScrollFrame)
@@ -443,7 +440,6 @@ local PlayerPanelMod, PlayerPanelToggle, _, _ = CreateModule("👥 Aktif Oyuncul
 
 SetupSlider(FlySlider, "FlySpeed", maxFlySpeed, function(val) NebulaConfig.Sliders.FlySpeed = val end, false)
 SetupSlider(SpeedSlider, "WalkSpeed", maxWalkSpeed, function(val) NebulaConfig.Sliders.WalkSpeed = val end, false)
-SetupSlider(SpinSlider, "SpinSpeed", maxSpinSpeed, function(val) NebulaConfig.Sliders.SpinSpeed = val end, true)
 
 local function ApplyESP(player)
     if player.Character and not player.Character:FindFirstChild("PremiumESP") then
@@ -514,29 +510,6 @@ local function UpdateSpeed()
 end
 local function ToggleSpeed() isSpeedEnabled = not isSpeedEnabled; UpdateUI(SpeedToggle, isSpeedEnabled); UpdateSpeed() end
 SpeedToggle.MouseButton1Click:Connect(ToggleSpeed); SetupKeybind(SpeedKey, "WalkSpeed", ToggleSpeed)
-
-local function UpdateSpin()
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChildOfClass("Humanoid") then return end
-    
-    local HRP = char.HumanoidRootPart
-    local Humanoid = char:FindFirstChildOfClass("Humanoid")
-    if isSpinning then
-        Humanoid.AutoRotate = false
-        if HRP:FindFirstChild("NebulaSpin") then HRP.NebulaSpin:Destroy() end
-        local spinForce = Instance.new("BodyAngularVelocity", HRP)
-        spinForce.Name = "NebulaSpin"; spinForce.MaxTorque = Vector3.new(0, math.huge, 0)
-        spinLoop = RunService.RenderStepped:Connect(function() 
-            if spinForce and spinForce.Parent then spinForce.AngularVelocity = Vector3.new(0, NebulaConfig.Sliders.SpinSpeed / 5, 0) end 
-        end)
-    else
-        Humanoid.AutoRotate = true
-        if spinLoop then spinLoop:Disconnect() end
-        if HRP:FindFirstChild("NebulaSpin") then HRP.NebulaSpin:Destroy() end
-    end
-end
-local function ToggleSpin() isSpinning = not isSpinning; UpdateUI(SpinToggle, isSpinning); UpdateSpin() end
-SpinToggle.MouseButton1Click:Connect(ToggleSpin); SetupKeybind(SpinKey, "Spin", ToggleSpin)
 
 local function UpdateJump()
     if isInfJumpEnabled then
@@ -794,7 +767,7 @@ local function RefreshPlayerList()
             UpdateSpectate(); RefreshPlayerList()
         end)
 
-        -- 🌀 GELİŞTİRİLMİŞ ULTRA FLING BUTONU (5 SANİYE)
+        -- 🌀 GELİŞTİRİLMİŞ ULTRA FLING BUTONU (2.5 SANİYE)
         local FlingBtn = Instance.new("TextButton", PFrame)
         FlingBtn.Size = UDim2.new(0, 35, 0, 30); FlingBtn.Position = UDim2.new(1, -210, 0, 10); FlingBtn.ZIndex = 14
         FlingBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 80)
@@ -829,8 +802,8 @@ local function RefreshPlayerList()
                     thrust.Location = myHRP.Position
                     thrust.Parent = myHRP
 
-                    -- SÜRE 5 SANİYEYE ÇIKARILDI
-                    local flingDuration = 5.0
+                    -- SÜRE 2.5 SANİYEYE İNDİRİLDİ
+                    local flingDuration = 2.5
                     local startTime = tick()
                     
                     local conn
@@ -841,8 +814,6 @@ local function RefreshPlayerList()
                         end
                         
                         if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-                            -- Noclip kapalı! Böylece çarpışmalar şiddetli olarak hesaba katılır.
-                            -- Hedefin içine milimetrik olarak rastgele bir konuma ışınlanıp muazzam bir itme kuvveti oluşturur
                             myHRP.CFrame = tHRP.CFrame * CFrame.new(math.random(-2, 2)/10, math.random(-2, 2)/10, math.random(-2, 2)/10)
                             myHRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                             myHRP.AssemblyAngularVelocity = Vector3.new(999999, 999999, 999999)
@@ -1135,7 +1106,6 @@ SetupKeybind(MenuToggleKey, "MenuToggle", ToggleMenuVisibility)
 CloseBtn.MouseButton1Click:Connect(function()
     isFlying = false; UpdateFly()
     isSpeedEnabled = false; UpdateSpeed()
-    isSpinning = false; UpdateSpin() 
     isNoclipEnabled = false; UpdateNoclip()
     isGlobalESPEnabled = false; UpdateGlobalESP()
     isMM2ESPEnabled = false; UpdateMM2ESP()
